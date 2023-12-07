@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -182,6 +183,7 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 			if ok {
 				delete(pendingPaths, sourcePath)
 			} else {
+				// TODO remove this.
 				// Base directory for extracted content. Relevant mainly to preserve
 				// the metadata, since the extracted content itself will also create
 				// any missing directories unaccounted for in the options.
@@ -217,21 +219,32 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 			if contentIsCached {
 				pathReader = bytes.NewReader(contentCache)
 			}
-			var targetPath string
+			var relativePath string
 			if globPath == "" {
-				targetPath = filepath.Join(options.TargetDir, extractInfo.Path)
+				relativePath = extractInfo.Path
 			} else {
-				targetPath = filepath.Join(options.TargetDir, sourcePath)
+				relativePath = sourcePath
 			}
 			if extractInfo.Mode != 0 {
 				tarHeader.Mode = int64(extractInfo.Mode)
 			}
+			parents := fsutil.OrderedParents(relativePath)
+			for _, path := range parents {
+				err := fileCreator.Create(&fsutil.CreateOptions{
+					Path:        filepath.Join(options.TargetDir, path),
+					Mode:        0755 | fs.ModeDir,
+					MakeParents: false,
+				})
+				if err != nil {
+					return err
+				}
+			}
 			err := fileCreator.Create(&fsutil.CreateOptions{
-				Path:        targetPath,
+				Path:        filepath.Join(options.TargetDir, relativePath),
 				Mode:        tarHeader.FileInfo().Mode(),
 				Data:        pathReader,
 				Link:        tarHeader.Linkname,
-				MakeParents: true,
+				MakeParents: false,
 			})
 			if err != nil {
 				return err

@@ -92,3 +92,24 @@ func createSymlink(o *CreateOptions) error {
 	}
 	return os.Symlink(o.Link, o.Path)
 }
+
+// TODO move to another file
+func OrderedParents(path string) []string {
+	path = filepath.Clean(path)
+
+	var parents []string
+	for {
+		parent := filepath.Dir(path)
+		if parent == path {
+			break
+		}
+		parents = append(parents, parent)
+		path = parent
+	}
+
+	orderedParents := make([]string, len(parents))
+	for i := range parents {
+		orderedParents[i] = parents[len(parents)-i-1]
+	}
+	return orderedParents
+}
