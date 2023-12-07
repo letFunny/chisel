@@ -1,6 +1,7 @@
 package scripts
 
 import (
+	"github.com/canonical/chisel/internal/fsutil"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 
@@ -17,9 +18,10 @@ func init() {
 type Value = starlark.Value
 
 type RunOptions struct {
-	Label     string
-	Namespace map[string]Value
-	Script    string
+	Label       string
+	Namespace   map[string]Value
+	Script      string
+	FileCreator fsutil.FileCreator
 }
 
 func Run(opts *RunOptions) error {

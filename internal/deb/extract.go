@@ -147,6 +147,9 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 		}
 	}
 
+	// TODO comment
+	tarDirectories := make(map[string]fs.FileMode)
+	createdParentDirectories := []string{}
 	tarReader := tar.NewReader(dataReader)
 	for {
 		tarHeader, err := tarReader.Next()
@@ -168,6 +171,9 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 		}
 
 		sourceIsDir := sourcePath[len(sourcePath)-1] == '/'
+		if sourceIsDir {
+			tarDirectories[sourcePath] = tarHeader.FileInfo().Mode()
+		}
 
 		//debugf("Extracting header: %#v", tarHeader)
 
@@ -183,7 +189,6 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 			if ok {
 				delete(pendingPaths, sourcePath)
 			} else {
-				// TODO remove this.
 				// Base directory for extracted content. Relevant mainly to preserve
 				// the metadata, since the extracted content itself will also create
 				// any missing directories unaccounted for in the options.
@@ -228,8 +233,15 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 			if extractInfo.Mode != 0 {
 				tarHeader.Mode = int64(extractInfo.Mode)
 			}
+
+			// Create the parent directories. We want to create them explicitly
+			// to track them using the FileCreator.
 			parents := fsutil.OrderedParents(relativePath)
 			for _, path := range parents {
+				if path == "/" {
+					continue
+				}
+				createdParentDirectories = append(createdParentDirectories, path)
 				err := fileCreator.Create(&fsutil.CreateOptions{
 					Path:        filepath.Join(options.TargetDir, path),
 					Mode:        0755 | fs.ModeDir,
@@ -239,6 +251,8 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 					return err
 				}
 			}
+
+			// Create the file itself.
 			err := fileCreator.Create(&fsutil.CreateOptions{
 				Path:        filepath.Join(options.TargetDir, relativePath),
 				Mode:        tarHeader.FileInfo().Mode(),
@@ -251,6 +265,20 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 			}
 			if globPath != "" {
 				break
+			}
+		}
+	}
+
+	// Correct the permissions of the created parent directories with the folder
+	// permissions from the archive.
+	for _, path := range createdParentDirectories {
+		if mode, ok := tarDirectories[path]; ok {
+			err := fileCreator.Create(&fsutil.CreateOptions{
+				Path: filepath.Join(options.TargetDir, path),
+				Mode: mode,
+			})
+			if err != nil {
+				return err
 			}
 		}
 	}

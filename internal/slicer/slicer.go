@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 
@@ -322,6 +323,7 @@ func Run(options *RunOptions) error {
 		}
 	}
 
+	fmt.Println(reflect.DeepEqual(knownPaths, report.Files))
 	return nil
 }
 
