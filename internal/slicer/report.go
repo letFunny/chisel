@@ -63,3 +63,7 @@ func (r *Report) AddFile(slice *setup.Slice, file fsutil.FileInfo) error {
 func (r *Report) AddMutatedFile(file fsutil.FileInfo) error {
 	return nil
 }
+
+func (r *Report) AddFileRemoval(path string) error {
+	return nil
+}

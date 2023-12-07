@@ -316,6 +316,10 @@ func Run(options *RunOptions) error {
 						untilDirs = append(untilDirs, realPath)
 					} else {
 						err = os.Remove(realPath)
+						err = report.AddFileRemoval(realPath)
+						if err != nil {
+							return err
+						}
 					}
 				}
 				if err != nil {
@@ -326,6 +330,10 @@ func Run(options *RunOptions) error {
 	}
 	for _, realPath := range untilDirs {
 		err := os.Remove(realPath)
+		err = report.AddFileRemoval(realPath)
+		if err != nil {
+			return err
+		}
 		// The non-empty directory error is caught by IsExist as well.
 		if err != nil && !os.IsExist(err) {
 			return fmt.Errorf("cannot perform 'until' removal: %#v", err)
