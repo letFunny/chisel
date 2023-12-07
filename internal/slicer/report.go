@@ -35,7 +35,7 @@ func (r *Report) AddFile(slice *setup.Slice, file fsutil.FileInfo) error {
 	defer r.mutex.Unlock()
 
 	if fr, ok := r.Files[file.Path]; ok {
-		if !fr.Mode.IsDir() {
+		if !fr.Mode.IsDir() && !fr.Slices[slice] {
 			var existingSlice *setup.Slice
 			for s := range fr.Slices {
 				existingSlice = s
@@ -57,5 +57,9 @@ func (r *Report) AddFile(slice *setup.Slice, file fsutil.FileInfo) error {
 			Link:    file.Link,
 		}
 	}
+	return nil
+}
+
+func (r *Report) AddMutatedFile(file fsutil.FileInfo) error {
 	return nil
 }

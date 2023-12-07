@@ -192,10 +192,14 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 				// Base directory for extracted content. Relevant mainly to preserve
 				// the metadata, since the extracted content itself will also create
 				// any missing directories unaccounted for in the options.
-				err := fileCreator.Create(&fsutil.CreateOptions{
+				err := createParentDirs(fileCreator, options.TargetDir, sourcePath)
+				if err != nil {
+					return err
+				}
+				err = fileCreator.Create(&fsutil.CreateOptions{
 					Path:        filepath.Join(options.TargetDir, sourcePath),
 					Mode:        tarHeader.FileInfo().Mode(),
-					MakeParents: true,
+					MakeParents: false,
 				})
 				if err != nil {
 					return err
@@ -234,26 +238,12 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 				tarHeader.Mode = int64(extractInfo.Mode)
 			}
 
-			// Create the parent directories. We want to create them explicitly
-			// to track them using the FileCreator.
-			parents := fsutil.OrderedParents(relativePath)
-			for _, path := range parents {
-				if path == "/" {
-					continue
-				}
-				createdParentDirectories = append(createdParentDirectories, path)
-				err := fileCreator.Create(&fsutil.CreateOptions{
-					Path:        filepath.Join(options.TargetDir, path),
-					Mode:        0755 | fs.ModeDir,
-					MakeParents: false,
-				})
-				if err != nil {
-					return err
-				}
+			err := createParentDirs(fileCreator, options.TargetDir, relativePath)
+			if err != nil {
+				return err
 			}
-
 			// Create the file itself.
-			err := fileCreator.Create(&fsutil.CreateOptions{
+			err = fileCreator.Create(&fsutil.CreateOptions{
 				Path:        filepath.Join(options.TargetDir, relativePath),
 				Mode:        tarHeader.FileInfo().Mode(),
 				Data:        pathReader,
@@ -296,5 +286,27 @@ func extractData(fileCreator fsutil.FileCreator, dataReader io.Reader, options *
 		}
 	}
 
+	return nil
+}
+
+// createParentDirs creates the parent directories by calling fileCreator explicitly
+// for each one to track their creation.
+func createParentDirs(fileCreator fsutil.FileCreator, targetDir string, relativePath string) error {
+	var createdParentDirectories []string
+	parents := fsutil.OrderedParents(relativePath)
+	for _, path := range parents {
+		if path == "/" {
+			continue
+		}
+		createdParentDirectories = append(createdParentDirectories, path)
+		err := fileCreator.Create(&fsutil.CreateOptions{
+			Path:        filepath.Join(targetDir, path),
+			Mode:        0755 | fs.ModeDir,
+			MakeParents: false,
+		})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

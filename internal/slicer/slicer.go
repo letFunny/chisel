@@ -272,12 +272,15 @@ func Run(options *RunOptions) error {
 		}
 		return err
 	}
+	fileCreatorProxy := fsutil.NewFileCreatorProxy()
 	content := &scripts.ContentValue{
-		RootDir:    targetDirAbs,
-		CheckWrite: checkWrite,
-		CheckRead:  checkRead,
+		RootDir:     targetDirAbs,
+		CheckWrite:  checkWrite,
+		CheckRead:   checkRead,
+		FileCreator: fileCreatorProxy,
 	}
 	for _, slice := range options.Selection.Slices {
+		// Set the proxy for this slice.
 		opts := scripts.RunOptions{
 			Label:  "mutate",
 			Script: slice.Scripts.Mutate,
@@ -288,6 +291,12 @@ func Run(options *RunOptions) error {
 		err := scripts.Run(&opts)
 		if err != nil {
 			return fmt.Errorf("slice %s: %w", slice, err)
+		}
+	}
+	for _, file := range fileCreatorProxy.Files {
+		err := report.AddMutatedFile(file)
+		if err != nil {
+			return err
 		}
 	}
 

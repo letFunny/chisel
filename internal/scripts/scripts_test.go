@@ -2,6 +2,7 @@ package scripts_test
 
 import (
 	"fmt"
+	"github.com/canonical/chisel/internal/fsutil"
 	"os"
 	"path/filepath"
 
@@ -218,9 +219,10 @@ func (s *S) TestScripts(c *C) {
 		}
 
 		content := &scripts.ContentValue{
-			RootDir:    rootDir,
-			CheckRead:  test.checkr,
-			CheckWrite: test.checkw,
+			RootDir:     rootDir,
+			CheckRead:   test.checkr,
+			CheckWrite:  test.checkw,
+			FileCreator: fsutil.DefaultFileCreator{},
 		}
 		namespace := map[string]scripts.Value{
 			"content": content,

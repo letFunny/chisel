@@ -1,6 +1,7 @@
 package scripts
 
 import (
+	"bytes"
 	"github.com/canonical/chisel/internal/fsutil"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -32,9 +33,10 @@ func Run(opts *RunOptions) error {
 }
 
 type ContentValue struct {
-	RootDir    string
-	CheckRead  func(path string) error
-	CheckWrite func(path string) error
+	RootDir     string
+	CheckRead   func(path string) error
+	CheckWrite  func(path string) error
+	FileCreator fsutil.FileCreator
 }
 
 // Content starlark.Value interface
@@ -173,7 +175,11 @@ func (c *ContentValue) Write(thread *starlark.Thread, fn *starlark.Builtin, args
 
 	// No mode parameter for now as slices are supposed to list files
 	// explicitly instead.
-	err = os.WriteFile(fpath, fdata, 0644)
+	err = c.FileCreator.Create(&fsutil.CreateOptions{
+		Path: fpath,
+		Mode: 0644,
+		Data: bytes.NewReader(fdata),
+	})
 	if err != nil {
 		return nil, c.polishError(path, err)
 	}
