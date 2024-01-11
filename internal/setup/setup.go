@@ -270,39 +270,6 @@ func readRelease(baseDir string) (*Release, error) {
 	}
 	return release, err
 }
-
-var ubuntuAdjectives = map[string]string{
-	"18.04": "bionic",
-	"20.04": "focal",
-	"22.04": "jammy",
-	"22.10": "kinetic",
-}
-
-func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
-	type yamlFormat struct {
-		Format string `yaml:"format"`
-	}
-
-	fileName := stripBase(baseDir, filePath)
-
-	yamlVar := yamlFormat{}
-	dec := yaml.NewDecoder(bytes.NewBuffer(data))
-	dec.KnownFields(false)
-	err := dec.Decode(&yamlVar)
-	if err != nil {
-		return nil, fmt.Errorf("%s: cannot parse release definition: %v", fileName, err)
-	}
-
-	switch yamlVar.Format {
-	case "chisel-v1":
-		return ParseReleaseChiselV1(baseDir, filePath, data)
-	case "v1":
-		return ParseReleaseV1(baseDir, filePath, data)
-	default:
-		return nil, fmt.Errorf("%s: unknown format %q", fileName, yamlVar.Format)
-	}
-}
-
 func readSlices(release *Release, baseDir, dirName string) error {
 	entries, err := os.ReadDir(dirName)
 	if err != nil {
@@ -347,6 +314,38 @@ func readSlices(release *Release, baseDir, dirName string) error {
 		release.Packages[pkg.Name] = pkg
 	}
 	return nil
+}
+
+var ubuntuAdjectives = map[string]string{
+	"18.04": "bionic",
+	"20.04": "focal",
+	"22.04": "jammy",
+	"22.10": "kinetic",
+}
+
+func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
+	type yamlFormat struct {
+		Format string `yaml:"format"`
+	}
+
+	fileName := stripBase(baseDir, filePath)
+
+	yamlVar := yamlFormat{}
+	dec := yaml.NewDecoder(bytes.NewBuffer(data))
+	dec.KnownFields(false)
+	err := dec.Decode(&yamlVar)
+	if err != nil {
+		return nil, fmt.Errorf("%s: cannot parse release definition: %v", fileName, err)
+	}
+
+	switch yamlVar.Format {
+	case "chisel-v1":
+		return ParseReleaseChiselV1(baseDir, filePath, data)
+	case "v1":
+		return ParseReleaseV1(baseDir, filePath, data)
+	default:
+		return nil, fmt.Errorf("%s: unknown format %q", fileName, yamlVar.Format)
+	}
 }
 
 type yamlPackage struct {
