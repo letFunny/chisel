@@ -33,7 +33,7 @@ var setupTests = []setupTest{{
 			format: foobar
 		`,
 	},
-	relerror: `chisel.yaml: expected format "chisel-v1", got "foobar"`,
+	relerror: `chisel.yaml: unknown format "foobar"`,
 }, {
 	summary: "Missing archives",
 	input: map[string]string{
