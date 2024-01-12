@@ -340,9 +340,9 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 
 	switch yamlVar.Format {
 	case "chisel-v1":
-		return ParseReleaseChiselV1(baseDir, filePath, data)
+		return parseReleaseChiselV1(baseDir, filePath, data)
 	case "v1":
-		return ParseReleaseV1(baseDir, filePath, data)
+		return parseReleaseV1(baseDir, filePath, data)
 	default:
 		return nil, fmt.Errorf("%s: unknown format %q", fileName, yamlVar.Format)
 	}

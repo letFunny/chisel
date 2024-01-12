@@ -10,7 +10,7 @@ import (
 	"github.com/canonical/chisel/internal/pgputil"
 )
 
-func ParseReleaseV1(baseDir, filePath string, data []byte) (*Release, error) {
+func parseReleaseV1(baseDir, filePath string, data []byte) (*Release, error) {
 	type yamlArchive struct {
 		Version    string   `yaml:"version"`
 		Suites     []string `yaml:"suites"`
