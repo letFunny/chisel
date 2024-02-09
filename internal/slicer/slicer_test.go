@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,13 +23,14 @@ var (
 )
 
 type slicerTest struct {
-	summary string
-	arch    string
-	release map[string]string
-	slices  []setup.SliceKey
-	hackopt func(c *C, opts *slicer.RunOptions)
-	result  map[string]string
-	error   string
+	summary      string
+	arch         string
+	release      map[string]string
+	slices       []setup.SliceKey
+	hackopt      func(c *C, opts *slicer.RunOptions)
+	fsResult     map[string]string
+	reportResult map[string]string
+	error        string
 }
 
 var packageEntries = map[string][]testutil.TarEntry{
@@ -84,7 +86,7 @@ var slicerTests = []slicerTest{{
 						/dir/foo/bar/:   {make: true, mode: 01777}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":           "dir 0755",
 		"/dir/file":       "file 0644 cc55e2ec",
 		"/dir/file_copy":  "file 0644 cc55e2ec",
@@ -93,6 +95,13 @@ var slicerTests = []slicerTest{{
 		"/dir/text_file":  "file 0644 5b41362b",
 		"/other_dir/":     "dir 0755",
 		"/other_dir/file": "symlink ../dir/file",
+	},
+	reportResult: map[string]string{
+		"/dir/file":       "file 0644 cc55e2ec {test-package_myslice}",
+		"/dir/file_copy":  "file 0644 cc55e2ec {test-package_myslice}",
+		"/dir/foo/bar/":   "dir 01777 {test-package_myslice}",
+		"/dir/text_file":  "file 0644 5b41362b {test-package_myslice}",
+		"/other_dir/file": "symlink ../dir/file {test-package_myslice}",
 	},
 }, {
 	summary: "Glob extraction",
@@ -106,11 +115,38 @@ var slicerTests = []slicerTest{{
 						/**/other_f*e:
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":                  "dir 0755",
 		"/dir/nested/":           "dir 0755",
 		"/dir/nested/other_file": "file 0644 6b86b273",
 		"/dir/other_file":        "file 0644 63d5dd49",
+	},
+	reportResult: map[string]string{
+		"/dir/nested/other_file": "file 0644 6b86b273 {test-package_myslice}",
+		"/dir/other_file":        "file 0644 63d5dd49 {test-package_myslice}",
+	},
+}, {
+	summary: "More glob extraction",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/dir/nested**:
+		`,
+	},
+	fsResult: map[string]string{
+		"/dir/":                  "dir 0755",
+		"/dir/nested/":           "dir 0755",
+		"/dir/nested/file":       "file 0644 84237a05",
+		"/dir/nested/other_file": "file 0644 6b86b273",
+	},
+	reportResult: map[string]string{
+		"/dir/nested/":           "dir 0755 {test-package_myslice}",
+		"/dir/nested/file":       "file 0644 84237a05 {test-package_myslice}",
+		"/dir/nested/other_file": "file 0644 6b86b273 {test-package_myslice}",
 	},
 }, {
 	summary: "Create new file under extracted directory and preserve parent directory permissions",
@@ -125,9 +161,12 @@ var slicerTests = []slicerTest{{
 						/parent/new: {text: data1}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/parent/":    "dir 01777",
 		"/parent/new": "file 0644 5b41362b",
+	},
+	reportResult: map[string]string{
+		"/parent/new": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
 	summary: "Create new nested file under extracted directory and preserve parent directory permissions",
@@ -142,10 +181,13 @@ var slicerTests = []slicerTest{{
 						/parent/permissions/new: {text: data1}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/parent/":                "dir 01777",
 		"/parent/permissions/":    "dir 0764",
 		"/parent/permissions/new": "file 0644 5b41362b",
+	},
+	reportResult: map[string]string{
+		"/parent/permissions/new": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
 	summary: "Create new directory under extracted directory",
@@ -160,9 +202,12 @@ var slicerTests = []slicerTest{{
 						/parent/new/: {make: true}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/parent/":     "dir 01777",
 		"/parent/new/": "dir 0755",
+	},
+	reportResult: map[string]string{
+		"/parent/new/": "dir 0755 {test-package_myslice}",
 	},
 }, {
 	summary: "Conditional architecture",
@@ -182,13 +227,19 @@ var slicerTests = []slicerTest{{
 						/dir/nested/copy_3: {copy: /dir/nested/file, arch: [i386, amd64]}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":              "dir 0755",
 		"/dir/text_file_1":   "file 0644 5b41362b",
 		"/dir/text_file_3":   "file 0644 5b41362b",
 		"/dir/nested/":       "dir 0755",
 		"/dir/nested/copy_1": "file 0644 84237a05",
 		"/dir/nested/copy_3": "file 0644 84237a05",
+	},
+	reportResult: map[string]string{
+		"/dir/nested/copy_1": "file 0644 84237a05 {test-package_myslice}",
+		"/dir/nested/copy_3": "file 0644 84237a05 {test-package_myslice}",
+		"/dir/text_file_1":   "file 0644 5b41362b {test-package_myslice}",
+		"/dir/text_file_3":   "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
 	summary: "Script: write a file",
@@ -204,9 +255,12 @@ var slicerTests = []slicerTest{{
 						content.write("/dir/text_file", "data2")
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":          "dir 0755",
 		"/dir/text_file": "file 0644 d98cf53e",
+	},
+	reportResult: map[string]string{
+		"/dir/text_file": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
 	summary: "Script: read a file",
@@ -224,11 +278,15 @@ var slicerTests = []slicerTest{{
 						content.write("/foo/text_file_2", data)
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":            "dir 0755",
 		"/dir/text_file_1": "file 0644 5b41362b",
 		"/foo/":            "dir 0755",
 		"/foo/text_file_2": "file 0644 5b41362b",
+	},
+	reportResult: map[string]string{
+		"/dir/text_file_1": "file 0644 5b41362b {test-package_myslice}",
+		"/foo/text_file_2": "file 0644 d98cf53e {test-package_myslice}",
 	},
 }, {
 	summary: "Script: use 'until' to remove file after mutate",
@@ -246,10 +304,15 @@ var slicerTests = []slicerTest{{
 						content.write("/foo/text_file_2", data)
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":            "dir 0755",
 		"/foo/":            "dir 0755",
 		"/foo/text_file_2": "file 0644 5b41362b",
+	},
+	reportResult: map[string]string{
+		// TODO this path needs to be removed from the report.
+		"/dir/text_file_1": "file 0644 5b41362b {test-package_myslice}",
+		"/foo/text_file_2": "file 0644 d98cf53e {test-package_myslice}",
 	},
 }, {
 	summary: "Script: use 'until' to remove wildcard after mutate",
@@ -264,9 +327,17 @@ var slicerTests = []slicerTest{{
 						/other_dir/text_file: {until: mutate, text: data1}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":       "dir 0755",
 		"/other_dir/": "dir 0755",
+	},
+	reportResult: map[string]string{
+		// TODO These first three entries should be removed from the report.
+		"/dir/nested/":           "dir 0755 {test-package_myslice}",
+		"/dir/nested/file":       "file 0644 84237a05 {test-package_myslice}",
+		"/dir/nested/other_file": "file 0644 6b86b273 {test-package_myslice}",
+
+		"/other_dir/text_file": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
 	summary: "Script: 'until' does not remove non-empty directories",
@@ -281,10 +352,14 @@ var slicerTests = []slicerTest{{
 						/dir/nested/file_copy: {copy: /dir/file}
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":                 "dir 0755",
 		"/dir/nested/":          "dir 0755",
 		"/dir/nested/file_copy": "file 0644 cc55e2ec",
+	},
+	reportResult: map[string]string{
+		"/dir/nested/":          "dir 0755 {test-package_myslice}",
+		"/dir/nested/file_copy": "file 0644 cc55e2ec {test-package_myslice}",
 	},
 }, {
 	summary: "Script: cannot write non-mutable files",
@@ -519,10 +594,13 @@ var slicerTests = []slicerTest{{
 						/dir/nested/file:
 		`,
 	},
-	result: map[string]string{
+	fsResult: map[string]string{
 		"/dir/":            "dir 0755",
 		"/dir/nested/":     "dir 0755",
 		"/dir/nested/file": "file 0644 84237a05",
+	},
+	reportResult: map[string]string{
+		"/dir/nested/file": "file 0644 84237a05 {test-package_myslice}",
 	},
 }}
 
@@ -636,7 +714,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 		if test.hackopt != nil {
 			test.hackopt(c, &options)
 		}
-		_, err = slicer.Run(&options)
+		report, err := slicer.Run(&options)
 		if test.error == "" {
 			c.Assert(err, IsNil)
 		} else {
@@ -644,15 +722,62 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			continue
 		}
 
-		if test.result != nil {
-			result := make(map[string]string, len(copyrightEntries)+len(test.result))
+		if test.fsResult != nil {
+			result := make(map[string]string, len(copyrightEntries)+len(test.fsResult))
 			for k, v := range copyrightEntries {
 				result[k] = v
 			}
-			for k, v := range test.result {
+			for k, v := range test.fsResult {
 				result[k] = v
 			}
 			c.Assert(testutil.TreeDump(targetDir), DeepEquals, result)
 		}
+
+		if test.reportResult != nil {
+			result := make(map[string]string, len(copyrightEntries)+len(test.fsResult))
+			for k, v := range copyrightEntries {
+				result[k] = v
+			}
+			for k, v := range test.reportResult {
+				result[k] = v
+			}
+			c.Assert(treeDumpReport(report), DeepEquals, test.reportResult)
+		}
 	}
+}
+
+// treeDumpReport returns the file information in the same format as
+// [testutil.TreeDump] with the added slices that have installed each path.
+func treeDumpReport(report *slicer.Report) map[string]string {
+	result := make(map[string]string)
+	for _, entry := range report.Entries {
+		fperm := entry.Mode.Perm()
+		if entry.Mode&fs.ModeSticky != 0 {
+			fperm |= 01000
+		}
+		var fsDump string
+		switch entry.Mode.Type() {
+		case fs.ModeDir:
+			entry.Path = entry.Path + "/"
+			fsDump = fmt.Sprintf("dir %#o", fperm)
+		case fs.ModeSymlink:
+			fsDump = fmt.Sprintf("symlink %s", entry.Link)
+		case 0: // Regular
+			if entry.Size == 0 {
+				fsDump = fmt.Sprintf("file %#o empty", entry.Mode.Perm())
+			} else {
+				fsDump = fmt.Sprintf("file %#o %s", fperm, entry.Hash[:8])
+			}
+		default:
+			panic(fmt.Errorf("unknown file type %d: %s", entry.Mode.Type(), entry.Path))
+		}
+
+		// append {slice1, ..., sliceN} to the end of the entry dump.
+		slicesStr := make([]string, 0, len(entry.Slices))
+		for slice := range entry.Slices {
+			slicesStr = append(slicesStr, slice.String())
+		}
+		result[entry.Path] = fmt.Sprintf("%s {%s}", fsDump, strings.Join(slicesStr, ","))
+	}
+	return result
 }
