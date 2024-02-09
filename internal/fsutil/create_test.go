@@ -83,52 +83,45 @@ func (s *S) TestCreate(c *C) {
 		dir := c.MkDir()
 		options := test.options
 		options.Path = filepath.Join(dir, options.Path)
-		creator := fsutil.NewCreator()
-		err := creator.Create(&options)
+		info, err := fsutil.Create(&options)
+
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
-		} else {
-			c.Assert(err, IsNil)
+			continue
 		}
+
+		c.Assert(err, IsNil)
 		c.Assert(testutil.TreeDump(dir), DeepEquals, test.result)
-		if test.options.MakeParents {
-			// The creator does not record the parent directories created
-			// implicitly.
-			for path, info := range treeDumpFSCreator(creator, dir) {
-				c.Assert(info, Equals, test.result[path])
-			}
-		} else {
-			c.Assert(treeDumpFSCreator(creator, dir), DeepEquals, test.result)
-		}
+		// [fsutil.Create] does not return information about parent directories
+		// created implicitly. We only check for the requested path.
+		c.Assert(dumpFSInfo(info, dir)[test.options.Path], DeepEquals, test.result[test.options.Path])
 	}
 }
 
-// treeDumpFSCreator dumps the contents stored in Creator about the filesystem
-// entries created using the same format as [testutil.TreeDump].
-func treeDumpFSCreator(cr *fsutil.Creator, root string) map[string]string {
+// dumpFSInfo returns the file information in the same format as
+// [testutil.TreeDump].
+func dumpFSInfo(info *fsutil.Info, root string) map[string]string {
 	result := make(map[string]string)
-	for _, file := range cr.Created {
-		path := strings.TrimPrefix(file.Path, root)
-		fperm := file.Mode.Perm()
-		if file.Mode&fs.ModeSticky != 0 {
-			fperm |= 01000
+	path := strings.TrimPrefix(info.Path, root)
+	fperm := info.Mode.Perm()
+	if info.Mode&fs.ModeSticky != 0 {
+		fperm |= 01000
+	}
+	switch info.Mode.Type() {
+	case fs.ModeDir:
+		result[path+"/"] = fmt.Sprintf("dir %#o", fperm)
+	case fs.ModeSymlink:
+		result[path] = fmt.Sprintf("symlink %s", info.Link)
+	case 0: // Regular
+		var entry string
+		if info.Size == 0 {
+			entry = fmt.Sprintf("file %#o empty", info.Mode.Perm())
+		} else {
+			entry = fmt.Sprintf("file %#o %s", fperm, info.Hash[:8])
 		}
-		switch file.Mode.Type() {
-		case fs.ModeDir:
-			result[path+"/"] = fmt.Sprintf("dir %#o", fperm)
-		case fs.ModeSymlink:
-			result[path] = fmt.Sprintf("symlink %s", file.Link)
-		case 0: // Regular
-			var entry string
-			if file.Size == 0 {
-				entry = fmt.Sprintf("file %#o empty", file.Mode.Perm())
-			} else {
-				entry = fmt.Sprintf("file %#o %s", fperm, file.Hash[:8])
-			}
-			result[path] = entry
-		default:
-			panic(fmt.Errorf("unknown file type %d: %s", file.Mode.Type(), path))
-		}
+		result[path] = entry
+	default:
+		panic(fmt.Errorf("unknown file type %d: %s", info.Mode.Type(), path))
 	}
 	return result
 }
