@@ -33,7 +33,7 @@ type Report struct {
 // provided root path.
 func NewReport(root string) *Report {
 	return &Report{
-		Root:    root,
+		Root:    filepath.Clean(root),
 		Entries: make(map[string]ReportEntry),
 		Marked:  make(map[string]bool),
 	}

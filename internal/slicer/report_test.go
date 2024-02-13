@@ -195,6 +195,12 @@ var reportAddTests = []struct {
 		}, slice: oneSlice},
 	},
 	err: `internal error: cannot add conflicting data for path "/exampleFile"`,
+}, {
+	summary: "Error for path outside root",
+	sliceAndInfo: []sliceAndInfo{
+		{info: fsutil.Info{Path: "/file"}, slice: oneSlice},
+	},
+	err: `internal error: cannot add path "/file" outside out root "/root"`,
 }}
 
 // TODO add test for path outside root.
