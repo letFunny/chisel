@@ -148,7 +148,7 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 	}
 
-	// Fetch all packages, using the selection order.
+	// Fetch all pkgs, using the selection order.
 	packages := make(map[string]io.ReadCloser)
 	for _, slice := range options.Selection.Slices {
 		if packages[slice.Package] != nil {
@@ -164,7 +164,7 @@ func Run(options *RunOptions) (*Report, error) {
 
 	globbedPaths := make(map[string][]string)
 
-	// Extract all packages, also using the selection order.
+	// Extract all pkgs, also using the selection order.
 	for _, slice := range options.Selection.Slices {
 		reader := packages[slice.Package]
 		if reader == nil {
@@ -198,7 +198,7 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 	}
 
-	// Create new content not coming from packages.
+	// Create new content not coming from pkgs.
 	done := make(map[string]bool)
 	for _, slice := range options.Selection.Slices {
 		arch := archives[slice.Package].Options().Arch

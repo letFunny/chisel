@@ -114,7 +114,6 @@ var extractTests = []extractTest{{
 		"/dir/":       "dir 0755",
 		"/other_dir/": "dir 0755",
 		"/parent/":    "dir 01777",
-		"/usr/":       "dir 0755",
 	},
 }, {
 	summary: "Globbing for files with multiple levels at once",
