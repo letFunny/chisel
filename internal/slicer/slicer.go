@@ -30,6 +30,15 @@ func Run(options *RunOptions) (*Report, error) {
 	pathInfos := make(map[string]setup.PathInfo)
 	report := NewReport(options.TargetDir)
 
+	// TODO why not use knownPaths instead of having another list in report. It is because
+	// they have not the same use (they are similar by ""chance""). knownPaths is a list of
+	// all the paths that the Starlark script can touch including parent directories. For
+	// the report paths we only want the paths that were asked for explicitly in the slice
+	// definition. It happens now that both are similar but they could very well diverge more
+	// in the future.
+
+	// TODO what we could do is to have the list of paths for report here as well
+	// instead of in the report "object".
 	knownPaths := make(map[string]bool)
 	knownPaths["/"] = true
 
@@ -102,8 +111,6 @@ func Run(options *RunOptions) (*Report, error) {
 			if pathInfo.Kind != setup.GlobPath {
 				addKnownPath(targetPath)
 				report.Mark(targetPath)
-			} else {
-				report.MarkGlob(targetPath)
 			}
 
 			pathInfos[targetPath] = pathInfo
@@ -183,6 +190,7 @@ func Run(options *RunOptions) (*Report, error) {
 	for _, expandedPaths := range globbedPaths {
 		for _, path := range expandedPaths {
 			addKnownPath(path)
+			report.Mark(path)
 		}
 	}
 

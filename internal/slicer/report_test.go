@@ -2,7 +2,6 @@ package slicer_test
 
 import (
 	"io/fs"
-	"path/filepath"
 
 	. "gopkg.in/check.v1"
 
@@ -198,14 +197,15 @@ var reportAddTests = []struct {
 	err: `internal error: cannot add conflicting data for path "/exampleFile"`,
 }}
 
+// TODO add test for path outside root.
+
 func (s *S) TestReportAdd(c *C) {
 	for _, test := range reportAddTests {
 		report := slicer.NewReport("/root/")
 		var err error
 		for _, si := range test.sliceAndInfo {
-			relPath, rerr := filepath.Rel(report.Root, si.info.Path)
-			c.Assert(rerr, IsNil)
-			report.Mark("/" + relPath)
+			relPath := "/" + si.info.Path[len(report.Root):]
+			report.Mark(relPath)
 			err = report.Add(si.slice, &si.info)
 		}
 		if test.err != "" {
@@ -213,50 +213,6 @@ func (s *S) TestReportAdd(c *C) {
 			continue
 		}
 		c.Assert(err, IsNil)
-		c.Assert(report.Entries, DeepEquals, test.expected, Commentf(test.summary))
-	}
-}
-
-var reportMarkTests = []struct {
-	path  string
-	marks []string
-	globs []string
-	ok    bool
-}{{
-	path:  "/root/dir/nested/file",
-	marks: []string{"/dir/nested/file"},
-}, {
-	path:  "/root/dir/nested/file",
-	globs: []string{"/d**"},
-}, {
-	path:  "/root/dir/",
-	globs: []string{"/d**"},
-}, {
-	path:  "/root/dir/",
-	globs: []string{"/d*"},
-}, {
-	path:  "/root/dir/file",
-	marks: []string{"/dir/", "/dir/fil"},
-	globs: []string{"/e**", "/d*"},
-}}
-
-func (s *S) TestReportMark(c *C) {
-	for _, test := range reportMarkTests {
-		report := slicer.NewReport("/root/")
-		for _, path := range test.marks {
-			report.Mark(path)
-		}
-		for _, glob := range test.globs {
-			report.MarkGlob(glob)
-		}
-		// Use sampleFile and change the path because we do not care about the
-		// rest of the attributes.
-		fileCpy := sampleFile
-		fileCpy.Path = test.path
-		c.Assert(report.Add(oneSlice, &fileCpy), IsNil)
-		if test.ok {
-			// Entry created.
-			c.Assert(report.Entries, HasLen, 1)
-		}
+		c.Assert(report.Collect(), DeepEquals, test.expected, Commentf(test.summary))
 	}
 }

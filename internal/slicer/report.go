@@ -7,7 +7,6 @@ import (
 
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/setup"
-	"github.com/canonical/chisel/internal/strdist"
 )
 
 type ReportEntry struct {
@@ -28,9 +27,6 @@ type Report struct {
 	Entries map[string]ReportEntry
 	// Marked holds all the paths that are included in the output of the report.
 	Marked map[string]bool
-	// MarkedGlob holds the globs that will include their leaf fs entry in the
-	// output of the report.
-	MarkedGlob []string
 }
 
 // NewReport returns an empty report for content that will be based at the
@@ -43,26 +39,13 @@ func NewReport(root string) *Report {
 	}
 }
 
+// Add expects an absolute path in info for a file/directory inside the report
+// root.
 func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
-	relPath, err := filepath.Rel(r.Root, info.Path)
-	if err != nil {
+	if len(info.Path) < len(r.Root) || info.Path[:len(r.Root)] != r.Root {
 		return fmt.Errorf("internal error: cannot add path %q outside out root %q", info.Path, r.Root)
 	}
-	relPath = "/" + relPath
-
-	// Check if the path is marked explicitly or if it matches a glob.
-	if !r.Marked[relPath] {
-		found := false
-		for _, glob := range r.MarkedGlob {
-			if strdist.GlobPath(glob, relPath) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
-	}
+	relPath := filepath.Clean("/" + info.Path[len(r.Root):])
 
 	if entry, ok := r.Entries[relPath]; ok {
 		if info.Mode != entry.Mode || info.Link != entry.Link ||
@@ -82,15 +65,23 @@ func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
 		}
 	}
 	return nil
+
+}
+
+// Collect returns only the relevant report entries.
+// See [Report.Mark].
+func (r *Report) Collect() map[string]ReportEntry {
+	res := make(map[string]ReportEntry)
+	for _, entry := range r.Entries {
+		// Check if the path is marked explicitly.
+		if r.Marked[entry.Path] {
+			res[entry.Path] = entry
+		}
+	}
+	return res
 }
 
 // Mark marks the path as relevant when outputting the report.
 func (r *Report) Mark(path string) {
 	r.Marked[filepath.Clean(path)] = true
-}
-
-// MarkGlob marks the glob as relevant when outputting the report. Only the leaf
-// fs entry of the glob will be considered.
-func (r *Report) MarkGlob(path string) {
-	r.MarkedGlob = append(r.MarkedGlob, path)
 }

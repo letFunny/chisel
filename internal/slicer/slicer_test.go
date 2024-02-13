@@ -734,13 +734,14 @@ func runSlicerTests(c *C, tests []slicerTest) {
 		}
 
 		if test.reportResult != nil {
-			result := make(map[string]string, len(copyrightEntries)+len(test.fsResult))
+			/* result := make(map[string]string, len(copyrightEntries)+len(test.reportResult))
 			for k, v := range copyrightEntries {
-				result[k] = v
+				result[k] = v + " {test-package_myslice}"
 			}
 			for k, v := range test.reportResult {
 				result[k] = v
 			}
+			c.Assert(treeDumpReport(report), DeepEquals, result)*/
 			c.Assert(treeDumpReport(report), DeepEquals, test.reportResult)
 		}
 	}
@@ -750,7 +751,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 // [testutil.TreeDump] with the added slices that have installed each path.
 func treeDumpReport(report *slicer.Report) map[string]string {
 	result := make(map[string]string)
-	for _, entry := range report.Entries {
+	for _, entry := range report.Collect() {
 		fperm := entry.Mode.Perm()
 		if entry.Mode&fs.ModeSticky != 0 {
 			fperm |= 01000
