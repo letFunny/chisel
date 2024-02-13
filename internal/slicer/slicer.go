@@ -337,6 +337,7 @@ func Run(options *RunOptions) (*Report, error) {
 	}
 
 	// We only want to include the installed paths in the final report.
+	// TODO we are not including copyright entries until their ownership is clear.
 	report.Filter(func(entry ReportEntry) bool {
 		return installedPaths[entry.Path]
 	})
