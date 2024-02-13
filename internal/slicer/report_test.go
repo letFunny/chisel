@@ -203,8 +203,6 @@ var reportAddTests = []struct {
 	err: `internal error: cannot add path "/file" outside out root "/root"`,
 }}
 
-// TODO add test for path outside root.
-
 func (s *S) TestReportAdd(c *C) {
 	for _, test := range reportAddTests {
 		report := slicer.NewReport("/root/")

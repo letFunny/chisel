@@ -68,7 +68,6 @@ func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
 		}
 	}
 	return nil
-
 }
 
 // Filter returns a report whose entries satisfy f(entry) = true.

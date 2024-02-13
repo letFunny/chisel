@@ -37,8 +37,13 @@ func Run(options *RunOptions) (*Report, error) {
 	// definition. It happens now that both are similar but they could very well diverge more
 	// in the future.
 
-	knownPaths := make(map[string]bool)
+	// installedPaths contains all the paths that were extracted because they
+	// matched a path or a glob in the slice definition.
 	installedPaths := make(map[string]bool)
+	// knownPaths contains all paths that were accessed or created when extracting
+	// slices. In particular, it contains installedPaths plus all parent directories
+	// touched.
+	knownPaths := make(map[string]bool)
 	knownPaths["/"] = true
 
 	addKnownPath := func(path string) {
