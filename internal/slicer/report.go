@@ -46,6 +46,9 @@ func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
 		return fmt.Errorf("internal error: cannot add path %q outside out root %q", info.Path, r.Root)
 	}
 	relPath := filepath.Clean("/" + info.Path[len(r.Root):])
+	if info.Mode&fs.ModeDir != 0 {
+		relPath = relPath + "/"
+	}
 
 	if entry, ok := r.Entries[relPath]; ok {
 		if info.Mode != entry.Mode || info.Link != entry.Link ||
@@ -68,20 +71,11 @@ func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
 
 }
 
-// Collect returns only the relevant report entries.
-// See [Report.Mark].
-func (r *Report) Collect() map[string]ReportEntry {
-	res := make(map[string]ReportEntry)
+// Filter returns a report whose entries satisfy f(entry) = true.
+func (r *Report) Filter(f func(ReportEntry) bool) {
 	for _, entry := range r.Entries {
-		// Check if the path is marked explicitly.
-		if r.Marked[entry.Path] {
-			res[entry.Path] = entry
+		if !f(entry) {
+			delete(r.Entries, entry.Path)
 		}
 	}
-	return res
-}
-
-// Mark marks the path as relevant when outputting the report.
-func (r *Report) Mark(path string) {
-	r.Marked[filepath.Clean(path)] = true
 }

@@ -37,9 +37,8 @@ func Run(options *RunOptions) (*Report, error) {
 	// definition. It happens now that both are similar but they could very well diverge more
 	// in the future.
 
-	// TODO what we could do is to have the list of paths for report here as well
-	// instead of in the report "object".
 	knownPaths := make(map[string]bool)
+	installedPaths := make(map[string]bool)
 	knownPaths["/"] = true
 
 	addKnownPath := func(path string) {
@@ -110,7 +109,7 @@ func Run(options *RunOptions) (*Report, error) {
 
 			if pathInfo.Kind != setup.GlobPath {
 				addKnownPath(targetPath)
-				report.Mark(targetPath)
+				installedPaths[targetPath] = true
 			}
 
 			pathInfos[targetPath] = pathInfo
@@ -190,7 +189,7 @@ func Run(options *RunOptions) (*Report, error) {
 	for _, expandedPaths := range globbedPaths {
 		for _, path := range expandedPaths {
 			addKnownPath(path)
-			report.Mark(path)
+			installedPaths[path] = true
 		}
 	}
 
@@ -331,6 +330,11 @@ func Run(options *RunOptions) (*Report, error) {
 			return nil, fmt.Errorf("cannot perform 'until' removal: %#v", err)
 		}
 	}
+
+	// We only want to include the installed paths in the final report.
+	report.Filter(func(entry ReportEntry) bool {
+		return installedPaths[entry.Path]
+	})
 
 	return report, nil
 }

@@ -27,7 +27,7 @@ var otherSlice = &setup.Slice{
 }
 
 var sampleDir = fsutil.Info{
-	Path: "/root/exampleDir",
+	Path: "/root/exampleDir/",
 	Mode: fs.ModeDir | 0654,
 	Link: "",
 }
@@ -64,8 +64,8 @@ var reportAddTests = []struct {
 	summary:      "Regular directory",
 	sliceAndInfo: []sliceAndInfo{{info: sampleDir, slice: oneSlice}},
 	expected: map[string]slicer.ReportEntry{
-		"/exampleDir": {
-			Path:   "/exampleDir",
+		"/exampleDir/": {
+			Path:   "/exampleDir/",
 			Mode:   fs.ModeDir | 0654,
 			Slices: map[*setup.Slice]bool{oneSlice: true},
 			Link:   "",
@@ -77,8 +77,8 @@ var reportAddTests = []struct {
 		{info: sampleDir, slice: otherSlice},
 	},
 	expected: map[string]slicer.ReportEntry{
-		"/exampleDir": {
-			Path:   "/exampleDir",
+		"/exampleDir/": {
+			Path:   "/exampleDir/",
 			Mode:   fs.ModeDir | 0654,
 			Slices: map[*setup.Slice]bool{oneSlice: true, otherSlice: true},
 			Link:   "",
@@ -114,8 +114,8 @@ var reportAddTests = []struct {
 		{info: sampleFile, slice: otherSlice},
 	},
 	expected: map[string]slicer.ReportEntry{
-		"/exampleDir": {
-			Path:   "/exampleDir",
+		"/exampleDir/": {
+			Path:   "/exampleDir/",
 			Mode:   fs.ModeDir | 0654,
 			Slices: map[*setup.Slice]bool{oneSlice: true},
 			Link:   "",
@@ -204,8 +204,6 @@ func (s *S) TestReportAdd(c *C) {
 		report := slicer.NewReport("/root/")
 		var err error
 		for _, si := range test.sliceAndInfo {
-			relPath := "/" + si.info.Path[len(report.Root):]
-			report.Mark(relPath)
 			err = report.Add(si.slice, &si.info)
 		}
 		if test.err != "" {
@@ -213,6 +211,6 @@ func (s *S) TestReportAdd(c *C) {
 			continue
 		}
 		c.Assert(err, IsNil)
-		c.Assert(report.Collect(), DeepEquals, test.expected, Commentf(test.summary))
+		c.Assert(report.Entries, DeepEquals, test.expected, Commentf(test.summary))
 	}
 }

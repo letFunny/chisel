@@ -751,7 +751,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 // [testutil.TreeDump] with the added slices that have installed each path.
 func treeDumpReport(report *slicer.Report) map[string]string {
 	result := make(map[string]string)
-	for _, entry := range report.Collect() {
+	for _, entry := range report.Entries {
 		fperm := entry.Mode.Perm()
 		if entry.Mode&fs.ModeSticky != 0 {
 			fperm |= 01000
@@ -759,7 +759,6 @@ func treeDumpReport(report *slicer.Report) map[string]string {
 		var fsDump string
 		switch entry.Mode.Type() {
 		case fs.ModeDir:
-			entry.Path = entry.Path + "/"
 			fsDump = fmt.Sprintf("dir %#o", fperm)
 		case fs.ModeSymlink:
 			fsDump = fmt.Sprintf("symlink %s", entry.Link)
