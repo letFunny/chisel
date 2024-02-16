@@ -68,7 +68,7 @@ func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
 	return nil
 }
 
-// Filter returns a report whose entries satisfy f(entry) = true.
+// Filter removes the entries of the report for which f(entry) != true.
 func (r *Report) Filter(f func(ReportEntry) bool) {
 	for _, entry := range r.Entries {
 		if !f(entry) {
