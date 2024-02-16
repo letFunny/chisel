@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/setup"
@@ -39,10 +40,10 @@ func NewReport(root string) *Report {
 // Add expects an absolute path in info for a file/directory inside the report
 // root.
 func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
-	if len(info.Path) < len(r.Root) || info.Path[:len(r.Root)] != r.Root {
+	if !strings.HasPrefix(info.Path, r.Root) {
 		return fmt.Errorf("internal error: cannot add path %q outside out root %q", info.Path, r.Root)
 	}
-	relPath := filepath.Clean("/" + info.Path[len(r.Root):])
+	relPath := filepath.Clean("/" + strings.TrimPrefix(info.Path, r.Root))
 	if info.Mode&fs.ModeDir != 0 {
 		relPath = relPath + "/"
 	}
