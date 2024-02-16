@@ -25,8 +25,6 @@ type Report struct {
 	Root string
 	// Entries holds all reported content, indexed by their path.
 	Entries map[string]ReportEntry
-	// Marked holds all the paths that are included in the output of the report.
-	Marked map[string]bool
 }
 
 // NewReport returns an empty report for content that will be based at the
@@ -35,7 +33,6 @@ func NewReport(root string) *Report {
 	return &Report{
 		Root:    filepath.Clean(root),
 		Entries: make(map[string]ReportEntry),
-		Marked:  make(map[string]bool),
 	}
 }
 
