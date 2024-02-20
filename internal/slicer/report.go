@@ -67,12 +67,3 @@ func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
 	}
 	return nil
 }
-
-// Filter removes the entries of the report for which f(entry) != true.
-func (r *Report) Filter(f func(ReportEntry) bool) {
-	for _, entry := range r.Entries {
-		if !f(entry) {
-			delete(r.Entries, entry.Path)
-		}
-	}
-}

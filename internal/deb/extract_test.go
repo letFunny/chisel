@@ -13,7 +13,6 @@ type extractTest struct {
 	summary string
 	pkgdata []byte
 	options deb.ExtractOptions
-	globbed map[string][]string
 	result  map[string]string
 	error   string
 }
@@ -138,7 +137,7 @@ var extractTests = []extractTest{{
 		"/dir/several/levels/deep/file": "file 0644 6bc26dff",
 	},
 }, {
-	summary: "Globbing with reporting of globbed paths",
+	summary: "Globbing multiple paths",
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
@@ -157,10 +156,6 @@ var extractTests = []extractTest{{
 		"/dir/several/levels/":          "dir 0755",
 		"/dir/several/levels/deep/":     "dir 0755",
 		"/dir/several/levels/deep/file": "file 0644 6bc26dff",
-	},
-	globbed: map[string][]string{
-		"/dir/n*/": []string{"/dir/nested/"},
-		"/dir/s**": []string{"/dir/several/levels/deep/", "/dir/several/levels/deep/file"},
 	},
 }, {
 	summary: "Globbing must have matching source and target",
@@ -293,20 +288,12 @@ func (s *S) TestExtract(c *C) {
 		options.Package = "test-package"
 		options.TargetDir = dir
 
-		if test.globbed != nil {
-			options.Globbed = make(map[string][]string)
-		}
-
 		err := deb.Extract(bytes.NewBuffer(test.pkgdata), &options)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
 			continue
 		} else {
 			c.Assert(err, IsNil)
-		}
-
-		if test.globbed != nil {
-			c.Assert(options.Globbed, DeepEquals, test.globbed)
 		}
 
 		result := testutil.TreeDump(dir)

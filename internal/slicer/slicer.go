@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,19 +31,6 @@ func Run(options *RunOptions) (*Report, error) {
 	pathInfos := make(map[string]setup.PathInfo)
 	report := NewReport(options.TargetDir)
 
-	// TODO why not use knownPaths instead of having another list in report. It is because
-	// they have not the same use (they are similar by ""chance""). knownPaths is a list of
-	// all the paths that the Starlark script can touch including parent directories. For
-	// the report paths we only want the paths that were asked for explicitly in the slice
-	// definition. It happens now that both are similar but they could very well diverge more
-	// in the future.
-
-	// installedPaths contains all the paths that were extracted because they
-	// matched a path or a glob in the slice definition.
-	installedPaths := make(map[string]bool)
-	// knownPaths contains all paths that were accessed or created when extracting
-	// slices. In particular, it contains installedPaths plus all parent directories
-	// touched.
 	knownPaths := make(map[string]bool)
 	knownPaths["/"] = true
 
@@ -111,12 +99,9 @@ func Run(options *RunOptions) (*Report, error) {
 			if len(pathInfo.Arch) > 0 && !contains(pathInfo.Arch, arch) {
 				continue
 			}
-
 			if pathInfo.Kind != setup.GlobPath {
 				addKnownPath(targetPath)
-				installedPaths[targetPath] = true
 			}
-
 			pathInfos[targetPath] = pathInfo
 			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath {
 				sourcePath := pathInfo.Info
@@ -148,7 +133,7 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 	}
 
-	// Fetch all pkgs, using the selection order.
+	// Fetch all packages, using the selection order.
 	packages := make(map[string]io.ReadCloser)
 	for _, slice := range options.Selection.Slices {
 		if packages[slice.Package] != nil {
@@ -164,22 +149,36 @@ func Run(options *RunOptions) (*Report, error) {
 
 	globbedPaths := make(map[string][]string)
 
-	// Extract all pkgs, also using the selection order.
+	// Extract all packages, also using the selection order.
 	for _, slice := range options.Selection.Slices {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
 		}
 		err := deb.Extract(reader, &deb.ExtractOptions{
-			Package:   slice.Package,
-			Extract:   extract[slice.Package],
+			Package: slice.Package,
+			Extract: extract[slice.Package],
+			// TODO should we remove targetDir?
 			TargetDir: targetDir,
-			Globbed:   globbedPaths,
 			// Creates the filesystem entry and adds it to the report.
-			Create: func(o *fsutil.CreateOptions) error {
+			Create: func(sourcePath string, extractInfo *deb.ExtractInfo, o *fsutil.CreateOptions) error {
 				info, err := fsutil.Create(o)
 				if err != nil {
 					return err
+				}
+
+				// We only want to keep the entries that were explicitly listed
+				// in the slice definition.
+				if !isExtractInSlice(extractInfo, slice) {
+					return nil
+				}
+
+				if strings.ContainsAny(sourcePath, "*?") {
+					relPath := filepath.Clean("/" + strings.TrimLeft(o.Path, targetDir))
+					if o.Mode&fs.ModeDir != 0 {
+						relPath = relPath + "/"
+					}
+					globbedPaths[sourcePath] = append(globbedPaths[sourcePath], relPath)
 				}
 				return report.Add(slice, info)
 			},
@@ -194,11 +193,10 @@ func Run(options *RunOptions) (*Report, error) {
 	for _, expandedPaths := range globbedPaths {
 		for _, path := range expandedPaths {
 			addKnownPath(path)
-			installedPaths[path] = true
 		}
 	}
 
-	// Create new content not coming from pkgs.
+	// Create new content not coming from packages.
 	done := make(map[string]bool)
 	for _, slice := range options.Selection.Slices {
 		arch := archives[slice.Package].Options().Arch
@@ -336,18 +334,24 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 	}
 
-	// We only want to include the installed paths in the final report.
-	// TODO we are not including copyright entries until their ownership is clear.
-	report.Filter(func(entry ReportEntry) bool {
-		return installedPaths[entry.Path]
-	})
-
 	return report, nil
 }
 
 func contains(l []string, s string) bool {
 	for _, si := range l {
 		if si == s {
+			return true
+		}
+	}
+	return false
+}
+
+func isExtractInSlice(extractInfo *deb.ExtractInfo, slice *setup.Slice) bool {
+	if extractInfo == nil {
+		return false
+	}
+	for path := range slice.Contents {
+		if extractInfo.Path == path {
 			return true
 		}
 	}
