@@ -179,6 +179,7 @@ func Run(options *RunOptions) (*Report, error) {
 						relPath = relPath + "/"
 					}
 					globbedPaths[extractInfo.Path] = append(globbedPaths[extractInfo.Path], relPath)
+					addKnownPath(relPath)
 				}
 				return report.Add(slice, info)
 			},
@@ -187,12 +188,6 @@ func Run(options *RunOptions) (*Report, error) {
 		packages[slice.Package] = nil
 		if err != nil {
 			return nil, err
-		}
-	}
-
-	for _, expandedPaths := range globbedPaths {
-		for _, path := range expandedPaths {
-			addKnownPath(path)
 		}
 	}
 
