@@ -332,6 +332,39 @@ var slicerTests = []slicerTest{{
 		"/file":     "file 0644 fc02ca0e {other-package_myslice}",
 	},
 }, {
+	summary: "Valid same file in two slices in different packages",
+	slices: []setup.SliceKey{
+		{"test-package", "myslice"},
+		{"other-package", "myslice"}},
+	pkgs: map[string][]byte{
+		"test-package":  testutil.PackageData["test-package"],
+		"other-package": testutil.PackageData["other-package"],
+	},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/textFile: {text: SAME_TEXT}
+		`,
+		"slices/mydir/other-package.yaml": `
+			package: other-package
+			slices:
+				myslice:
+					contents:
+						/textFile: {text: SAME_TEXT}
+		`,
+	},
+	fsResult: map[string]string{
+		"/textFile": "file 0644 c6c83d10",
+	},
+	reportResult: map[string]string{
+		// Note: This is the only case where two slices can declare the same
+		// file without conflicts.
+		"/textFile": "file 0644 c6c83d10 {other-package_myslice}",
+	},
+}, {
 	summary: "Script: write a file",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: map[string][]byte{
