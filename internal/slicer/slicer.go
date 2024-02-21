@@ -161,7 +161,7 @@ func Run(options *RunOptions) (*Report, error) {
 			// TODO should we remove targetDir?
 			TargetDir: targetDir,
 			// Creates the filesystem entry and adds it to the report.
-			Create: func(sourcePath string, extractInfo *deb.ExtractInfo, o *fsutil.CreateOptions) error {
+			Create: func(extractInfo *deb.ExtractInfo, o *fsutil.CreateOptions) error {
 				info, err := fsutil.Create(o)
 				if err != nil {
 					return err
@@ -173,12 +173,12 @@ func Run(options *RunOptions) (*Report, error) {
 					return nil
 				}
 
-				if strings.ContainsAny(sourcePath, "*?") {
+				if strings.ContainsAny(extractInfo.Path, "*?") {
 					relPath := filepath.Clean("/" + strings.TrimLeft(o.Path, targetDir))
 					if o.Mode&fs.ModeDir != 0 {
 						relPath = relPath + "/"
 					}
-					globbedPaths[sourcePath] = append(globbedPaths[sourcePath], relPath)
+					globbedPaths[extractInfo.Path] = append(globbedPaths[extractInfo.Path], relPath)
 				}
 				return report.Add(slice, info)
 			},

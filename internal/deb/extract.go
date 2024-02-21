@@ -25,8 +25,8 @@ type ExtractOptions struct {
 	TargetDir string
 	Extract   map[string][]ExtractInfo
 	// Create creates a fs entry given the options. If the entry is extracted from
-	// the tarball, sourcePath and extractInfo should not be empty.
-	Create func(sourcePath string, extractInfo *ExtractInfo, options *fsutil.CreateOptions) error
+	// the tarball extractInfo should not be empty, else a nil can be passed.
+	Create func(extractInfo *ExtractInfo, options *fsutil.CreateOptions) error
 }
 
 type ExtractInfo struct {
@@ -47,7 +47,7 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 
 	if options.Create == nil {
 		validOpts := *options
-		validOpts.Create = func(_ string, _ *ExtractInfo, o *fsutil.CreateOptions) error {
+		validOpts.Create = func(_ *ExtractInfo, o *fsutil.CreateOptions) error {
 			_, err := fsutil.Create(o)
 			return err
 		}
@@ -168,41 +168,38 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 			return err
 		}
 
-		tarPath := tarHeader.Name
-		if len(tarPath) < 3 || tarPath[0] != '.' || tarPath[1] != '/' {
+		sourcePath := tarHeader.Name
+		if len(sourcePath) < 3 || sourcePath[0] != '.' || sourcePath[1] != '/' {
 			continue
 		}
-		tarPath = tarPath[1:]
-		globPath, ok := shouldExtract(tarPath)
+		sourcePath = sourcePath[1:]
+		globPath, ok := shouldExtract(sourcePath)
 		if !ok {
 			continue
 		}
 
-		sourceIsDir := tarPath[len(tarPath)-1] == '/'
+		sourceIsDir := sourcePath[len(sourcePath)-1] == '/'
 
 		//debugf("Extracting header: %#v", tarHeader)
 
-		var sourcePath string
 		var extractInfos []ExtractInfo
 		if globPath != "" {
-			sourcePath = globPath
 			extractInfos = options.Extract[globPath]
 			delete(pendingPaths, globPath)
 		} else {
-			sourcePath = tarPath
-			extractInfos, ok = options.Extract[tarPath]
+			extractInfos, ok = options.Extract[sourcePath]
 			if ok {
-				delete(pendingPaths, tarPath)
+				delete(pendingPaths, sourcePath)
 			} else {
 				// Base directory for extracted content. Relevant mainly to preserve
 				// the metadata, since the extracted content itself will also create
 				// any missing directories unaccounted for in the options.
 				createOptions := &fsutil.CreateOptions{
-					Path:        filepath.Join(options.TargetDir, tarPath),
+					Path:        filepath.Join(options.TargetDir, sourcePath),
 					Mode:        tarHeader.FileInfo().Mode(),
 					MakeParents: true,
 				}
-				err := options.Create("", nil, createOptions)
+				err := options.Create(nil, createOptions)
 				if err != nil {
 					return err
 				}
@@ -234,7 +231,7 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 			if globPath == "" {
 				targetPath = filepath.Join(options.TargetDir, extractInfo.Path)
 			} else {
-				targetPath = filepath.Join(options.TargetDir, tarPath)
+				targetPath = filepath.Join(options.TargetDir, sourcePath)
 			}
 			if extractInfo.Mode != 0 {
 				tarHeader.Mode = int64(extractInfo.Mode)
@@ -246,7 +243,7 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 				Link:        tarHeader.Linkname,
 				MakeParents: true,
 			}
-			err := options.Create(sourcePath, &extractInfo, createOptions)
+			err := options.Create(&extractInfo, createOptions)
 			if err != nil {
 				return err
 			}

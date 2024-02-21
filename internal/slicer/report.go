@@ -20,7 +20,7 @@ type ReportEntry struct {
 }
 
 // Report holds the information about files and directories created when slicing
-// pkgs.
+// packages.
 type Report struct {
 	// Root is the filesystem path where the all reported content is based.
 	Root string
