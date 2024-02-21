@@ -156,9 +156,8 @@ func Run(options *RunOptions) (*Report, error) {
 			continue
 		}
 		err := deb.Extract(reader, &deb.ExtractOptions{
-			Package: slice.Package,
-			Extract: extract[slice.Package],
-			// TODO should we remove targetDir?
+			Package:   slice.Package,
+			Extract:   extract[slice.Package],
 			TargetDir: targetDir,
 			// Creates the filesystem entry and adds it to the report.
 			Create: func(extractInfo *deb.ExtractInfo, o *fsutil.CreateOptions) error {
@@ -173,6 +172,7 @@ func Run(options *RunOptions) (*Report, error) {
 					return nil
 				}
 
+				// Check whether the file was created because it matched a glob.
 				if strings.ContainsAny(extractInfo.Path, "*?") {
 					relPath := filepath.Clean("/" + strings.TrimLeft(o.Path, targetDir))
 					if o.Mode&fs.ModeDir != 0 {
