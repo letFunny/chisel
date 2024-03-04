@@ -37,32 +37,35 @@ func NewReport(root string) *Report {
 	}
 }
 
-// Add expects an absolute path in info for a file/directory inside the report
-// root.
-func (r *Report) Add(slice *setup.Slice, info *fsutil.Info) error {
-	if !strings.HasPrefix(info.Path, r.Root) {
-		return fmt.Errorf("internal error: cannot add path %q outside out root %q", info.Path, r.Root)
+func (r *Report) Add(slice *setup.Slice, fsEntry *fsutil.Entry) error {
+	if !strings.HasPrefix(fsEntry.Path, r.Root) {
+		return fmt.Errorf("cannot add path %q outside of root %q", fsEntry.Path, r.Root)
 	}
-	relPath := filepath.Clean("/" + strings.TrimPrefix(info.Path, r.Root))
-	if info.Mode&fs.ModeDir != 0 {
+	relPath := filepath.Clean("/" + strings.TrimPrefix(fsEntry.Path, r.Root))
+	if fsEntry.Mode&fs.ModeDir != 0 {
 		relPath = relPath + "/"
 	}
 
 	if entry, ok := r.Entries[relPath]; ok {
-		if info.Mode != entry.Mode || info.Link != entry.Link ||
-			info.Size != entry.Size || info.Hash != entry.Hash {
-			return fmt.Errorf("internal error: cannot add conflicting data for path %q", relPath)
+		if fsEntry.Mode != entry.Mode {
+			return fmt.Errorf("path %q reported twice with diverging mode: %q != %q", relPath, fsEntry.Mode, entry.Mode)
+		} else if fsEntry.Link != entry.Link {
+			return fmt.Errorf("path %q reported twice with diverging link: %q != %q", relPath, fsEntry.Link, entry.Link)
+		} else if fsEntry.Size != entry.Size {
+			return fmt.Errorf("path %q reported twice with diverging size: %d != %d", relPath, fsEntry.Size, entry.Size)
+		} else if fsEntry.Hash != entry.Hash {
+			return fmt.Errorf("path %q reported twice with diverging hash: %q != %q", relPath, fsEntry.Hash, entry.Hash)
 		}
 		entry.Slices[slice] = true
 		r.Entries[relPath] = entry
 	} else {
 		r.Entries[relPath] = ReportEntry{
 			Path:   relPath,
-			Mode:   info.Mode,
-			Hash:   info.Hash,
-			Size:   info.Size,
+			Mode:   fsEntry.Mode,
+			Hash:   fsEntry.Hash,
+			Size:   fsEntry.Size,
 			Slices: map[*setup.Slice]bool{slice: true},
-			Link:   info.Link,
+			Link:   fsEntry.Link,
 		}
 	}
 	return nil

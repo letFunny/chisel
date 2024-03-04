@@ -21,7 +21,7 @@ type CreateOptions struct {
 	MakeParents bool
 }
 
-type Info struct {
+type Entry struct {
 	Path string
 	Mode fs.FileMode
 	Hash string
@@ -31,7 +31,7 @@ type Info struct {
 
 // Create creates a filesystem entry according to the provided options and returns
 // the information about the created entry.
-func Create(options *CreateOptions) (*Info, error) {
+func Create(options *CreateOptions) (*Entry, error) {
 	rp := &readerProxy{inner: options.Data, h: sha256.New()}
 	// Use the proxy instead of the raw Reader.
 	optsCopy := *options
@@ -60,14 +60,14 @@ func Create(options *CreateOptions) (*Info, error) {
 		return nil, err
 	}
 
-	info := &Info{
+	entry := &Entry{
 		Path: o.Path,
 		Mode: o.Mode,
 		Hash: hash,
 		Size: rp.size,
 		Link: o.Link,
 	}
-	return info, nil
+	return entry, nil
 }
 
 func createDir(o *CreateOptions) error {
