@@ -311,6 +311,45 @@ var slicerTests = []slicerTest{{
 		"/file":     "file 0644 fc02ca0e {other-package_myslice}",
 	},
 }, {
+	summary: "Install two packages, explicit path has preference over implicit parent",
+	slices: []setup.SliceKey{
+		{"implicit-parent", "myslice"},
+		{"explicit-dir", "myslice"}},
+	pkgs: map[string][]byte{
+		"implicit-parent": testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(0755, "./dir/"),
+			testutil.Reg(0644, "./dir/file", "random"),
+		}),
+		"explicit-dir": testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(01777, "./dir/"),
+		}),
+	},
+	release: map[string]string{
+		"slices/mydir/implicit-parent.yaml": `
+			package: implicit-parent
+			slices:
+				myslice:
+					contents:
+						/dir/file:
+		`,
+		"slices/mydir/explicit-dir.yaml": `
+			package: explicit-dir
+			slices:
+				myslice:
+					contents:
+						/dir/:
+		`,
+	},
+	filesystem: map[string]string{
+		// TODO this is the wrong mode for the directory, it should be 01777.
+		"/dir/":     "dir 0755",
+		"/dir/file": "file 0644 a441b15f",
+	},
+	report: map[string]string{
+		"/dir/":     "dir 01777 {explicit-dir_myslice}",
+		"/dir/file": "file 0644 a441b15f {implicit-parent_myslice}",
+	},
+}, {
 	summary: "Valid same file in two slices in different packages",
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"},
