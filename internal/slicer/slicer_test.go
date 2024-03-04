@@ -419,6 +419,7 @@ var slicerTests = []slicerTest{{
 	report: map[string]string{
 		// Note: This is the only case where two slices can declare the same
 		// file without conflicts.
+		// TODO which slice(s) should own the file.
 		"/textFile": "file 0644 c6c83d10 {other-package_myslice}",
 	},
 }, {
