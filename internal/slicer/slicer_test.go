@@ -23,13 +23,14 @@ var (
 )
 
 type slicerTest struct {
-	summary    string
-	arch       string
-	release    map[string]string
-	pkgs       map[string][]byte
-	slices     []setup.SliceKey
-	hackopt    func(c *C, opts *slicer.RunOptions)
-	filesystem map[string]string
+	summary string
+	arch    string
+	release map[string]string
+	// archivePkgs: archiveName -> packageName -> package bytes
+	archivePkgs map[string]map[string][]byte
+	slices      []setup.SliceKey
+	hackopt     func(c *C, opts *slicer.RunOptions)
+	filesystem  map[string]string
 	// TODO:
 	// The results of the report do not conform to the planned implementation
 	// yet. Namely:
@@ -251,9 +252,11 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Copyright is installed",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: map[string][]byte{
-		// Add the copyright entries to the package.
-		"test-package": testutil.MustMakeDeb(append(testutil.TestPackageEntries, testPackageCopyrightEntries...)),
+	archivePkgs: map[string]map[string][]byte{
+		"ubuntu": {
+			// Add the copyright entries to the package.
+			"test-package": testutil.MustMakeDeb(append(testutil.TestPackageEntries, testPackageCopyrightEntries...)),
+		},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -282,9 +285,11 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"},
 		{"other-package", "myslice"}},
-	pkgs: map[string][]byte{
-		"test-package":  testutil.PackageData["test-package"],
-		"other-package": testutil.PackageData["other-package"],
+	archivePkgs: map[string]map[string][]byte{
+		"ubuntu": {
+			"test-package":  testutil.PackageData["test-package"],
+			"other-package": testutil.PackageData["other-package"],
+		},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -322,14 +327,16 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"implicit-parent", "myslice"},
 		{"explicit-dir", "myslice"}},
-	pkgs: map[string][]byte{
-		"implicit-parent": testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0755, "./dir/"),
-			testutil.Reg(0644, "./dir/file", "random"),
-		}),
-		"explicit-dir": testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(01777, "./dir/"),
-		}),
+	archivePkgs: map[string]map[string][]byte{
+		"ubuntu": {
+			"implicit-parent": testutil.MustMakeDeb([]testutil.TarEntry{
+				testutil.Dir(0755, "./dir/"),
+				testutil.Reg(0644, "./dir/file", "random"),
+			}),
+			"explicit-dir": testutil.MustMakeDeb([]testutil.TarEntry{
+				testutil.Dir(01777, "./dir/"),
+			}),
+		},
 	},
 	release: map[string]string{
 		"slices/mydir/implicit-parent.yaml": `
@@ -360,14 +367,16 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"explicit-dir", "myslice"},
 		{"implicit-parent", "myslice"}},
-	pkgs: map[string][]byte{
-		"implicit-parent": testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0755, "./dir/"),
-			testutil.Reg(0644, "./dir/file", "random"),
-		}),
-		"explicit-dir": testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(01777, "./dir/"),
-		}),
+	archivePkgs: map[string]map[string][]byte{
+		"ubuntu": {
+			"implicit-parent": testutil.MustMakeDeb([]testutil.TarEntry{
+				testutil.Dir(0755, "./dir/"),
+				testutil.Reg(0644, "./dir/file", "random"),
+			}),
+			"explicit-dir": testutil.MustMakeDeb([]testutil.TarEntry{
+				testutil.Dir(01777, "./dir/"),
+			}),
+		},
 	},
 	release: map[string]string{
 		"slices/mydir/implicit-parent.yaml": `
@@ -398,9 +407,11 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"},
 		{"other-package", "myslice"}},
-	pkgs: map[string][]byte{
-		"test-package":  testutil.PackageData["test-package"],
-		"other-package": testutil.PackageData["other-package"],
+	archivePkgs: map[string]map[string][]byte{
+		"ubuntu": {
+			"test-package":  testutil.PackageData["test-package"],
+			"other-package": testutil.PackageData["other-package"],
+		},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -694,9 +705,11 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Duplicate copyright symlink is ignored",
 	slices:  []setup.SliceKey{{"copyright-symlink-openssl", "bins"}},
-	pkgs: map[string][]byte{
-		"copyright-symlink-openssl": testutil.MustMakeDeb(packageEntries["copyright-symlink-openssl"]),
-		"copyright-symlink-libssl3": testutil.MustMakeDeb(packageEntries["copyright-symlink-libssl3"]),
+	archivePkgs: map[string]map[string][]byte{
+		"ubuntu": {
+			"copyright-symlink-openssl": testutil.MustMakeDeb(packageEntries["copyright-symlink-openssl"]),
+			"copyright-symlink-libssl3": testutil.MustMakeDeb(packageEntries["copyright-symlink-libssl3"]),
+		},
 	},
 	release: map[string]string{
 		"slices/mydir/copyright-symlink-libssl3.yaml": `
@@ -757,6 +770,12 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Non-default archive",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	archivePkgs: map[string]map[string][]byte{
+		"bar": {
+			"test-package": testutil.PackageData["test-package"],
+		},
+		"foo": {},
+	},
 	release: map[string]string{
 		"chisel.yaml": `
 			format: chisel-v1
@@ -792,6 +811,215 @@ var slicerTests = []slicerTest{{
 	report: map[string]string{
 		"/dir/nested/file": "file 0644 84237a05 {test-package_myslice}",
 	},
+}, {
+	summary: "Archives with priorities",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	archivePkgs: map[string]map[string][]byte{
+		"bar": {
+			"test-package": testutil.MustMakeDeb([]testutil.TarEntry{
+				testutil.Dir(0755, "./"),
+				testutil.Dir(0755, "./bar/"),
+			}),
+		},
+		"foo": {
+			"test-package": testutil.MustMakeDeb([]testutil.TarEntry{
+				testutil.Dir(0755, "./"),
+				testutil.Dir(0755, "./foo/"),
+			}),
+		},
+	},
+	release: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: 2
+					v1-public-keys: [test-key]
+				bar:
+					version: 22.04
+					components: [main]
+					priority: 1
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/foo/:
+		`,
+	},
+	filesystem: map[string]string{
+		"/foo/": "dir 0755",
+	},
+	report: map[string]string{
+		"/foo/": "dir 0755 {test-package_myslice}",
+	},
+}, {
+	summary: "Package archive takes precedence over priorities",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	archivePkgs: map[string]map[string][]byte{
+		"bar": {
+			"test-package": testutil.PackageData["test-package"],
+		},
+		"foo": {},
+	},
+	release: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: 1
+					v1-public-keys: [test-key]
+				bar:
+					version: 22.04
+					components: [main]
+					priority: 2
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			archive: foo
+			slices:
+				myslice:
+					contents:
+						/dir/nested/file:
+		`,
+	},
+	error: `slice package "test-package" missing from archives "foo"`,
+}, {
+	summary: "Non-positive priorities, archive is not used automatically",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	archivePkgs: map[string]map[string][]byte{
+		"bar": {
+			"test-package": testutil.PackageData["test-package"],
+		},
+		"baz": {
+			"test-package": testutil.PackageData["test-package"],
+		},
+		"foo": {},
+	},
+	release: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: 2
+					v1-public-keys: [test-key]
+				bar:
+					version: 22.04
+					components: [main]
+					priority: -1
+					v1-public-keys: [test-key]
+				baz:
+					version: 22.04
+					components: [main]
+					priority: 0
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/dir/nested/file:
+		`,
+	},
+	error: `slice package "test-package" missing from archives "foo"`,
+}, {
+	summary: "Archives with non-positive priorities can be selected explicitly",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	archivePkgs: map[string]map[string][]byte{
+		"bar": {
+			"test-package": testutil.PackageData["test-package"],
+		},
+		"foo": {},
+	},
+	release: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: 2
+					v1-public-keys: [test-key]
+				bar:
+					version: 22.04
+					components: [main]
+					priority: -1
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			archive: bar
+			slices:
+				myslice:
+					contents:
+						/dir/nested/file:
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":            "dir 0755",
+		"/dir/nested/":     "dir 0755",
+		"/dir/nested/file": "file 0644 84237a05",
+	},
+	report: map[string]string{
+		"/dir/nested/file": "file 0644 84237a05 {test-package_myslice}",
+	},
+}, {
+	summary: "Package not found in archives",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: 2
+					v1-public-keys: [test-key]
+				bar:
+					version: 22.04
+					components: [main]
+					priority: 1
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/dir/nested/file:
+		`,
+	},
+	error: `slice package "test-package" missing from archives "foo, bar"`,
 }}
 
 var defaultChiselYaml = `
@@ -857,9 +1085,11 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			test.release["chisel.yaml"] = string(defaultChiselYaml)
 		}
 
-		if test.pkgs == nil {
-			test.pkgs = map[string][]byte{
-				"test-package": testutil.PackageData["test-package"],
+		if test.archivePkgs == nil {
+			test.archivePkgs = map[string]map[string][]byte{
+				"ubuntu": {
+					"test-package": testutil.PackageData["test-package"],
+				},
 			}
 		}
 
@@ -888,7 +1118,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 					Components: setupArchive.Components,
 					Arch:       test.arch,
 				},
-				pkgs: test.pkgs,
+				pkgs: test.archivePkgs[setupArchive.Name],
 			}
 			archives[name] = archive
 		}

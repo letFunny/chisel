@@ -71,19 +71,40 @@ func Run(options *RunOptions) (*Report, error) {
 		targetDirAbs = filepath.Join(dir, targetDir)
 	}
 
+	// Fetch all packages, using the selection order.
+	packages := make(map[string]io.ReadCloser)
+	for _, slice := range options.Selection.Slices {
+		if packages[slice.Package] != nil {
+			continue
+		}
+		if _, ok := archives[slice.Package]; !ok {
+			for _, archiveName := range release.Packages[slice.Package].Archives {
+				archive := options.Archives[archiveName]
+				if archive == nil {
+					return nil, fmt.Errorf("archive %q not defined", archiveName)
+				}
+				if archive.Exists(slice.Package) {
+					archives[slice.Package] = archive
+					break
+				}
+			}
+			if _, ok = archives[slice.Package]; !ok {
+				return nil, fmt.Errorf("slice package %q missing from archives %q", slice.Package, strings.Join(release.Packages[slice.Package].Archives, ", "))
+			}
+		}
+
+		reader, err := archives[slice.Package].Fetch(slice.Package)
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		packages[slice.Package] = reader
+	}
+
 	// Build information to process the selection.
 	for _, slice := range options.Selection.Slices {
 		extractPackage := extract[slice.Package]
 		if extractPackage == nil {
-			archiveName := release.Packages[slice.Package].Archive
-			archive := options.Archives[archiveName]
-			if archive == nil {
-				return nil, fmt.Errorf("archive %q not defined", archiveName)
-			}
-			if !archive.Exists(slice.Package) {
-				return nil, fmt.Errorf("slice package %q missing from archive", slice.Package)
-			}
-			archives[slice.Package] = archive
 			extractPackage = make(map[string][]deb.ExtractInfo)
 			extract[slice.Package] = extractPackage
 		}
@@ -131,21 +152,6 @@ func Run(options *RunOptions) (*Report, error) {
 			})
 		}
 	}
-
-	// Fetch all packages, using the selection order.
-	packages := make(map[string]io.ReadCloser)
-	for _, slice := range options.Selection.Slices {
-		if packages[slice.Package] != nil {
-			continue
-		}
-		reader, err := archives[slice.Package].Fetch(slice.Package)
-		if err != nil {
-			return nil, err
-		}
-		defer reader.Close()
-		packages[slice.Package] = reader
-	}
-
 	globbedPaths := make(map[string][]string)
 
 	// Extract all packages, also using the selection order.

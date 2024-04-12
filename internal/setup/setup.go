@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/openpgp/packet"
@@ -20,9 +22,15 @@ import (
 // Release is a collection of package slices targeting a particular
 // distribution version.
 type Release struct {
-	Path           string
-	Packages       map[string]*Package
-	Archives       map[string]*Archive
+	Path     string
+	Packages map[string]*Package
+	Archives map[string]*Archive
+	// ArchivesByPriority contains the ordered list of archives from high to low
+	// priority. It is set when at least one archive has a priority field. If
+	// none do, we fall back to using DefaultArchive.
+	ArchivesByPriority []string
+	// DefaultArchive is set when an archive has the `default` yaml field set.
+	// It is here for backwards compatibility and will be deprecated in the future.
 	DefaultArchive string
 }
 
@@ -32,15 +40,18 @@ type Archive struct {
 	Version    string
 	Suites     []string
 	Components []string
+	Priority   int
 	PubKeys    []*packet.PublicKey
 }
 
 // Package holds a collection of slices that represent parts of themselves.
 type Package struct {
-	Name    string
-	Path    string
-	Archive string
-	Slices  map[string]*Slice
+	Name string
+	Path string
+	// Archives should be used in order to fetch the package where an archive
+	// with a lower index always takes precedence.
+	Archives []string
+	Slices   map[string]*Slice
 }
 
 // Slice holds the details about a package slice.
@@ -314,8 +325,14 @@ func readSlices(release *Release, baseDir, dirName string) error {
 		if err != nil {
 			return err
 		}
-		if pkg.Archive == "" {
-			pkg.Archive = release.DefaultArchive
+		// Use archive(s) from release if no explicit archive is set in the
+		// package.
+		if len(pkg.Archives) == 0 {
+			if release.ArchivesByPriority != nil {
+				pkg.Archives = release.ArchivesByPriority
+			} else {
+				pkg.Archives = []string{release.DefaultArchive}
+			}
 		}
 
 		release.Packages[pkg.Name] = pkg
@@ -335,6 +352,7 @@ type yamlArchive struct {
 	Version    string   `yaml:"version"`
 	Suites     []string `yaml:"suites"`
 	Components []string `yaml:"components"`
+	Priority   string   `yaml:"priority"`
 	Default    bool     `yaml:"default"`
 	PubKeys    []string `yaml:"public-keys"`
 	// V1PubKeys is used for compatibility with format "chisel-v1".
@@ -453,6 +471,12 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		pubKeys[keyName] = key
 	}
 
+	// archivesByPriority contains the sorted list of archives from high to low
+	// priority. Only priorities strictly greater than 0 are considered.
+	var archivesByPriority []string
+	// hasPriority exists to maintain backwards compatibility. If an archive has
+	// a `priority` field, `default` is ignored.
+	hasPriority := false
 	for archiveName, details := range yamlVar.Archives {
 		if details.Version == "" {
 			return nil, fmt.Errorf("%s: archive %q missing version field", fileName, archiveName)
@@ -475,6 +499,15 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		if details.Default {
 			release.DefaultArchive = archiveName
 		}
+		var priority int
+		if details.Priority != "" {
+			prio, err := strconv.Atoi(details.Priority)
+			if err != nil {
+				return nil, fmt.Errorf("%s: archive %q has invalid priority field", fileName, archiveName)
+			}
+			hasPriority = true
+			priority = prio
+		}
 		if len(details.PubKeys) == 0 {
 			if yamlVar.Format == "chisel-v1" {
 				return nil, fmt.Errorf("%s: archive %q missing v1-public-keys field", fileName, archiveName)
@@ -496,8 +529,31 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 			Suites:     details.Suites,
 			Components: details.Components,
 			PubKeys:    archiveKeys,
+			Priority:   priority,
+		}
+		if details.Priority != "" && priority > 0 {
+			archivesByPriority = append(archivesByPriority, archiveName)
 		}
 	}
+
+	if hasPriority {
+		var err error
+		sort.Slice(archivesByPriority, func(i, j int) bool {
+			a, b := release.Archives[archivesByPriority[i]], release.Archives[archivesByPriority[j]]
+			if a.Priority == b.Priority && err == nil {
+				firstName, secondName := archivesByPriority[i], archivesByPriority[j]
+				if firstName > secondName {
+					firstName, secondName = secondName, firstName
+				}
+				err = fmt.Errorf("archives %q and %q conflict in priorities", firstName, secondName)
+			}
+			return !(a.Priority < b.Priority)
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	release.ArchivesByPriority = archivesByPriority
 
 	return release, err
 }
@@ -519,7 +575,9 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 	if yamlPkg.Name != pkg.Name {
 		return nil, fmt.Errorf("%s: filename and 'package' field (%q) disagree", pkgPath, yamlPkg.Name)
 	}
-	pkg.Archive = yamlPkg.Archive
+	if yamlPkg.Archive != "" {
+		pkg.Archives = []string{yamlPkg.Archive}
+	}
 
 	zeroPath := yamlPath{}
 	for sliceName, yamlSlice := range yamlPkg.Slices {

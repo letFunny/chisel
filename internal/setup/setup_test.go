@@ -85,10 +85,10 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
-				Slices:  map[string]*setup.Slice{},
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
+				Slices:   map[string]*setup.Slice{},
 			},
 		},
 	},
@@ -129,9 +129,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice1": {
 						Package: "mypkg",
@@ -191,9 +191,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice1": {
 						Package: "mypkg",
@@ -452,9 +452,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice1": {
 						Package: "mypkg",
@@ -667,9 +667,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice": {
 						Package: "mypkg",
@@ -707,9 +707,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice": {
 						Package: "mypkg",
@@ -748,9 +748,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice": {
 						Package: "mypkg",
@@ -811,10 +811,10 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "foo",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
-				Slices:  map[string]*setup.Slice{},
+				Archives: []string{"foo"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
+				Slices:   map[string]*setup.Slice{},
 			},
 		},
 	},
@@ -861,9 +861,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "ubuntu",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
 				Slices: map[string]*setup.Slice{
 					"myslice": {
 						Package: "mypkg",
@@ -926,10 +926,10 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"mypkg": {
-				Archive: "foo",
-				Name:    "mypkg",
-				Path:    "slices/mydir/mypkg.yaml",
-				Slices:  map[string]*setup.Slice{},
+				Archives: []string{"foo"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
+				Slices:   map[string]*setup.Slice{},
 			},
 		},
 	},
@@ -1040,9 +1040,9 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"jq": {
-				Archive: "ubuntu",
-				Name:    "jq",
-				Path:    "slices/mydir/jq.yaml",
+				Archives: []string{"ubuntu"},
+				Name:     "jq",
+				Path:     "slices/mydir/jq.yaml",
 				Slices: map[string]*setup.Slice{
 					"bins": {
 						Package: "jq",
@@ -1063,6 +1063,132 @@ var setupTests = []setupTest{{
 		`,
 	},
 	relerror: `invalid slice definition filename: "a.yaml"`,
+}, {
+	summary: "Priorities conflict",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: 2
+					v1-public-keys: [test-key]
+				bar:
+					version: 22.04
+					components: [main]
+					priority: 2
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+	},
+	relerror: `archives "bar" and "foo" conflict in priorities`,
+}, {
+	summary: "Priorities conflict",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				foo:
+					version: 22.04
+					components: [main, universe]
+					priority: HIGH
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+	},
+	relerror: `chisel.yaml: archive "foo" has invalid priority field`,
+}, {
+	summary: "Archives with priorities",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				bigger:
+					version: 22.04
+					components: [main, other]
+					priority: 10000
+					suites: [jammy, jammy-security]
+					v1-public-keys: [test-key]
+				positive:
+					version: 22.04
+					components: [main, other]
+					priority: 1234
+					suites: [jammy, jammy-security]
+					v1-public-keys: [test-key]
+				negative:
+					version: 22.04
+					components: [main, other]
+					priority: -7
+					suites: [jammy, jammy-security]
+					v1-public-keys: [test-key]
+				zero:
+					version: 22.04
+					components: [main, other]
+					priority: 0
+					suites: [jammy, jammy-security]
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/mypkg.yaml": `
+			package: mypkg
+		`,
+	},
+	release: &setup.Release{
+		DefaultArchive:     "",
+		ArchivesByPriority: []string{"bigger", "positive"},
+		Archives: map[string]*setup.Archive{
+			"bigger": {
+				Name:       "bigger",
+				Version:    "22.04",
+				Suites:     []string{"jammy", "jammy-security"},
+				Components: []string{"main", "other"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Priority:   10000,
+			},
+			"positive": {
+				Name:       "positive",
+				Version:    "22.04",
+				Suites:     []string{"jammy", "jammy-security"},
+				Components: []string{"main", "other"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Priority:   1234,
+			},
+			"negative": {
+				Name:       "negative",
+				Version:    "22.04",
+				Suites:     []string{"jammy", "jammy-security"},
+				Components: []string{"main", "other"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Priority:   -7,
+			},
+			"zero": {
+				Name:       "zero",
+				Version:    "22.04",
+				Suites:     []string{"jammy", "jammy-security"},
+				Components: []string{"main", "other"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Priority:   0,
+			},
+		},
+		Packages: map[string]*setup.Package{
+			"mypkg": {
+				Archives: []string{"bigger", "positive"},
+				Name:     "mypkg",
+				Path:     "slices/mydir/mypkg.yaml",
+				Slices:   map[string]*setup.Slice{},
+			},
+		},
+	},
 }}
 
 var defaultChiselYaml = `
