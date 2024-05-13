@@ -18,9 +18,9 @@ import (
 )
 
 type RunOptions struct {
-	Selection *setup.Selection
-	Archives  map[string]archive.Archive
-	TargetDir string
+	Selection   *setup.Selection
+	PkgArchives map[string]archive.Archive
+	TargetDir   string
 }
 
 func Run(options *RunOptions) (*Report, error) {
@@ -60,7 +60,6 @@ func Run(options *RunOptions) (*Report, error) {
 		syscall.Umask(oldUmask)
 	}()
 
-	release := options.Selection.Release
 	targetDir := filepath.Clean(options.TargetDir)
 	targetDirAbs := targetDir
 	if !filepath.IsAbs(targetDirAbs) {
@@ -75,15 +74,7 @@ func Run(options *RunOptions) (*Report, error) {
 	for _, slice := range options.Selection.Slices {
 		extractPackage := extract[slice.Package]
 		if extractPackage == nil {
-			archiveName := release.Packages[slice.Package].Archive
-			archive := options.Archives[archiveName]
-			if archive == nil {
-				return nil, fmt.Errorf("archive %q not defined", archiveName)
-			}
-			if !archive.Exists(slice.Package) {
-				return nil, fmt.Errorf("slice package %q missing from archive", slice.Package)
-			}
-			archives[slice.Package] = archive
+			archives[slice.Package] = options.PkgArchives[slice.Package]
 			extractPackage = make(map[string][]deb.ExtractInfo)
 			extract[slice.Package] = extractPackage
 		}

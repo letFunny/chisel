@@ -893,11 +893,31 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			archives[name] = archive
 		}
 
+		pkgArchives := map[string]archive.Archive{}
+		for _, pkg := range release.Packages {
+			if pkg.Archive == "" {
+				var chosen *setup.Archive
+				for _, releaseArchive := range selection.Release.Archives {
+					archive := archives[releaseArchive.Name]
+					if archive == nil || !archive.Exists(pkg.Name) {
+						continue
+					}
+					if chosen == nil || chosen.Priority < releaseArchive.Priority {
+						chosen = releaseArchive
+					}
+				}
+				c.Assert(chosen, NotNil)
+				pkgArchives[pkg.Name] = archives[chosen.Name]
+			} else {
+				pkgArchives[pkg.Name] = archives[pkg.Archive]
+			}
+		}
+
 		targetDir := c.MkDir()
 		options := slicer.RunOptions{
-			Selection: selection,
-			Archives:  archives,
-			TargetDir: targetDir,
+			Selection:   selection,
+			PkgArchives: pkgArchives,
+			TargetDir:   targetDir,
 		}
 		if test.hackopt != nil {
 			test.hackopt(c, &options)

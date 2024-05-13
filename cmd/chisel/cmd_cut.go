@@ -99,12 +99,55 @@ func (cmd *cmdCut) Execute(args []string) error {
 		archives[archiveName] = openArchive
 	}
 
+	pkgArchives, err := selectPkgArchives(archives, selection)
+	if err != nil {
+		return err
+	}
+
 	_, err = slicer.Run(&slicer.RunOptions{
-		Selection: selection,
-		Archives:  archives,
-		TargetDir: cmd.RootDir,
+		Selection:   selection,
+		PkgArchives: pkgArchives,
+		TargetDir:   cmd.RootDir,
 	})
 	return err
+}
+
+// selectPkgArchives selects the appropriate archive for each selected slice
+// package. It returns a map of archives indexed by package names.
+func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Selection) (map[string]archive.Archive, error) {
+	pkgArchives := make(map[string]archive.Archive)
+	for _, s := range selection.Slices {
+		pkg := selection.Release.Packages[s.Package]
+		if _, ok := pkgArchives[pkg.Name]; ok {
+			continue
+		}
+		if pkg.Archive == "" {
+			var chosen *setup.Archive
+			for _, releaseArchive := range selection.Release.Archives {
+				archive := archives[releaseArchive.Name]
+				if archive == nil || !archive.Exists(pkg.Name) {
+					continue
+				}
+				if chosen == nil || chosen.Priority < releaseArchive.Priority {
+					chosen = releaseArchive
+				}
+			}
+			if chosen == nil {
+				return nil, fmt.Errorf("slice package %q missing from archive(s)", pkg.Name)
+			}
+			pkgArchives[pkg.Name] = archives[chosen.Name]
+		} else {
+			archive := archives[pkg.Archive]
+			if archive == nil {
+				return nil, fmt.Errorf("archive %q not defined", pkg.Archive)
+			}
+			if !archive.Exists(pkg.Name) {
+				return nil, fmt.Errorf("slice package %q missing from archive", pkg.Name)
+			}
+			pkgArchives[pkg.Name] = archive
+		}
+	}
+	return pkgArchives, nil
 }
 
 // TODO These need testing, and maybe moving into a common file.
