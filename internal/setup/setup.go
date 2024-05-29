@@ -32,6 +32,8 @@ type Archive struct {
 	Version    string
 	Suites     []string
 	Components []string
+	Pro        string
+	Priority   int32
 	PubKeys    []*packet.PublicKey
 }
 
@@ -314,9 +316,6 @@ func readSlices(release *Release, baseDir, dirName string) error {
 		if err != nil {
 			return err
 		}
-		if pkg.Archive == "" {
-			pkg.Archive = release.DefaultArchive
-		}
 
 		release.Packages[pkg.Name] = pkg
 	}
@@ -331,20 +330,33 @@ type yamlRelease struct {
 	V1PubKeys map[string]yamlPubKey `yaml:"v1-public-keys"`
 }
 
+type proValue string
+
+const (
+	proNone        proValue = ""
+	proFIPS        proValue = "fips"
+	proFIPSUpdates proValue = "fips-updates"
+	proApps        proValue = "apps"
+	proInfra       proValue = "infra"
+)
+
 type yamlArchive struct {
 	Version    string   `yaml:"version"`
 	Suites     []string `yaml:"suites"`
 	Components []string `yaml:"components"`
 	Default    bool     `yaml:"default"`
+	Priority   int32    `yaml:"priority"`
+	Pro        proValue `yaml:"pro"`
 	PubKeys    []string `yaml:"public-keys"`
 	// V1PubKeys is used for compatibility with format "chisel-v1".
 	V1PubKeys []string `yaml:"v1-public-keys"`
 }
 
 type yamlPackage struct {
-	Name    string               `yaml:"package"`
-	Archive string               `yaml:"archive"`
-	Slices  map[string]yamlSlice `yaml:"slices"`
+	Name      string               `yaml:"package"`
+	Archive   string               `yaml:"archive"`
+	Essential []string             `yaml:"essential"`
+	Slices    map[string]yamlSlice `yaml:"slices"`
 }
 
 type yamlPath struct {
@@ -475,6 +487,12 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		if details.Default {
 			release.DefaultArchive = archiveName
 		}
+		switch details.Pro {
+		case proNone, proApps, proFIPS, proFIPSUpdates, proInfra:
+		default:
+			logf("%s: archive %q ignored due to invalid pro value: %s", fileName, archiveName, details.Pro)
+			continue
+		}
 		if len(details.PubKeys) == 0 {
 			if yamlVar.Format == "chisel-v1" {
 				return nil, fmt.Errorf("%s: archive %q missing v1-public-keys field", fileName, archiveName)
@@ -495,6 +513,8 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 			Version:    details.Version,
 			Suites:     details.Suites,
 			Components: details.Components,
+			Pro:        string(details.Pro),
+			Priority:   details.Priority,
 			PubKeys:    archiveKeys,
 		}
 	}
@@ -535,11 +555,36 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 				Mutate: yamlSlice.Mutate,
 			},
 		}
-
+		for _, refName := range yamlPkg.Essential {
+			sliceKey, err := ParseSliceKey(refName)
+			if err != nil {
+				return nil, fmt.Errorf("package %q has invalid essential slice reference: %q", pkgName, refName)
+			}
+			if sliceKey.Package == slice.Package && sliceKey.Slice == slice.Name {
+				// Do not add the slice to its own essentials list.
+				continue
+			}
+			// TODO replace with slices.Contains once it is stable.
+			for _, sk := range slice.Essential {
+				if sk == sliceKey {
+					return nil, fmt.Errorf("package %s defined with redundant essential slice: %s", pkgName, refName)
+				}
+			}
+			slice.Essential = append(slice.Essential, sliceKey)
+		}
 		for _, refName := range yamlSlice.Essential {
 			sliceKey, err := ParseSliceKey(refName)
 			if err != nil {
-				return nil, fmt.Errorf("invalid slice reference %q in %s", refName, pkgPath)
+				return nil, fmt.Errorf("package %q has invalid essential slice reference: %q", pkgName, refName)
+			}
+			if sliceKey.Package == slice.Package && sliceKey.Slice == slice.Name {
+				return nil, fmt.Errorf("cannot add slice to itself as essential %q in %s", refName, pkgPath)
+			}
+			// TODO replace with slices.Contains once it is stable.
+			for _, sk := range slice.Essential {
+				if sk == sliceKey {
+					return nil, fmt.Errorf("slice %s defined with redundant essential slice: %s", slice, refName)
+				}
 			}
 			slice.Essential = append(slice.Essential, sliceKey)
 		}

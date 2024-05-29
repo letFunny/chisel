@@ -792,6 +792,68 @@ var slicerTests = []slicerTest{{
 	report: map[string]string{
 		"/dir/nested/file": "file 0644 84237a05 {test-package_myslice}",
 	},
+}, {
+	summary: "Pro archives",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"chisel.yaml": `
+			format: chisel-v1
+			archives:
+				ubuntu:
+					version: 20.04
+					components: [main]
+					suites: [focal]
+					priority: 10
+					v1-public-keys: [test-key]
+				fips:
+					version: 20.04
+					components: [main]
+					suites: [focal]
+					pro: fips
+					priority: 20
+					v1-public-keys: [test-key]
+				fips-updates:
+					version: 20.04
+					components: [main]
+					suites: [focal-updates]
+					pro: fips-updates
+					priority: 21
+					v1-public-keys: [test-key]
+				apps:
+					version: 20.04
+					components: [main]
+					suites: [focal-apps-security]
+					pro: apps
+					priority: 16
+					v1-public-keys: [test-key]
+				infra:
+					version: 20.04
+					components: [main]
+					suites: [focal-infra-security]
+					pro: infra
+					priority: 15
+					v1-public-keys: [test-key]
+			v1-public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/dir/nested/file:
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":            "dir 0755",
+		"/dir/nested/":     "dir 0755",
+		"/dir/nested/file": "file 0644 84237a05",
+	},
+	report: map[string]string{
+		"/dir/nested/file": "file 0644 84237a05 {test-package_myslice}",
+	},
 }}
 
 var defaultChiselYaml = `
@@ -886,6 +948,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 					Version:    setupArchive.Version,
 					Suites:     setupArchive.Suites,
 					Components: setupArchive.Components,
+					Pro:        setupArchive.Pro,
 					Arch:       test.arch,
 				},
 				pkgs: test.pkgs,
@@ -893,11 +956,31 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			archives[name] = archive
 		}
 
+		pkgArchives := map[string]archive.Archive{}
+		for _, pkg := range release.Packages {
+			if pkg.Archive == "" {
+				var chosen *setup.Archive
+				for _, releaseArchive := range selection.Release.Archives {
+					archive := archives[releaseArchive.Name]
+					if archive == nil || !archive.Exists(pkg.Name) {
+						continue
+					}
+					if chosen == nil || chosen.Priority < releaseArchive.Priority {
+						chosen = releaseArchive
+					}
+				}
+				c.Assert(chosen, NotNil)
+				pkgArchives[pkg.Name] = archives[chosen.Name]
+			} else {
+				pkgArchives[pkg.Name] = archives[pkg.Archive]
+			}
+		}
+
 		targetDir := c.MkDir()
 		options := slicer.RunOptions{
-			Selection: selection,
-			Archives:  archives,
-			TargetDir: targetDir,
+			Selection:   selection,
+			PkgArchives: pkgArchives,
+			TargetDir:   targetDir,
 		}
 		if test.hackopt != nil {
 			test.hackopt(c, &options)

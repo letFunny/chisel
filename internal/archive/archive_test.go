@@ -322,21 +322,6 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 	_, err = archive.Open(&options)
 	c.Assert(err, IsNil)
 
-	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("UbuntuProFIPS"))
-
-	options = archive.Options{
-		Label:      "ubuntu",
-		Version:    "22.04",
-		Arch:       "amd64",
-		Suites:     []string{"jammy"},
-		Components: []string{"main", "universe"},
-		CacheDir:   c.MkDir(),
-		PubKeys:    []*packet.PublicKey{s.pubKey},
-	}
-
-	_, err = archive.Open(&options)
-	c.Assert(err, IsNil)
-
 	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("ThirdParty"))
 
 	options = archive.Options{
@@ -351,6 +336,66 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 
 	_, err = archive.Open(&options)
 	c.Assert(err, ErrorMatches, `.*\bno Ubuntu section`)
+}
+
+var proArchiveInfo = map[string]struct {
+	baseURL, label string
+}{
+	"fips": {
+		baseURL: "https://esm.ubuntu.com/fips/ubuntu/",
+		label:   "UbuntuFIPS",
+	},
+	"fips-updates": {
+		baseURL: "https://esm.ubuntu.com/fips-updates/ubuntu/",
+		label:   "UbuntuFIPSUpdates",
+	},
+	"apps": {
+		baseURL: "https://esm.ubuntu.com/apps/ubuntu/",
+		label:   "UbuntuESMApps",
+	},
+	"infra": {
+		baseURL: "https://esm.ubuntu.com/infra/ubuntu/",
+		label:   "UbuntuESM",
+	},
+}
+
+func (s *httpSuite) TestProArchives(c *C) {
+	setLabel := func(label string) func(*testarchive.Release) {
+		return func(r *testarchive.Release) {
+			r.Label = label
+		}
+	}
+
+	credsDir := c.MkDir()
+	restore := fakeEnv("CHISEL_AUTH_DIR", credsDir)
+	defer restore()
+
+	confFile := filepath.Join(credsDir, "credentials")
+	contents := ""
+	for _, info := range proArchiveInfo {
+		contents += fmt.Sprintf("machine %s login foo password bar\n", info.baseURL)
+	}
+	err := os.WriteFile(confFile, []byte(contents), 0600)
+	c.Assert(err, IsNil)
+
+	for pro, info := range proArchiveInfo {
+		s.base = info.baseURL
+		s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel(info.label))
+
+		options := archive.Options{
+			Label:      "ubuntu",
+			Version:    "22.04",
+			Arch:       "amd64",
+			Suites:     []string{"jammy"},
+			Components: []string{"main", "universe"},
+			CacheDir:   c.MkDir(),
+			Pro:        pro,
+			PubKeys:    []*packet.PublicKey{s.pubKey},
+		}
+
+		_, err = archive.Open(&options)
+		c.Assert(err, IsNil)
+	}
 }
 
 type verifyArchiveReleaseTest struct {
