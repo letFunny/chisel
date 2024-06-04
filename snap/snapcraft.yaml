@@ -26,7 +26,7 @@ source-code: https://github.com/canonical/chisel
 license: AGPL-3.0
 adopt-info: chisel-release-data
 
-base: core22
+base: core24
 confinement: strict
 
 parts:
