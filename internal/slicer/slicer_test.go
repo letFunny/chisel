@@ -2,9 +2,7 @@ package slicer_test
 
 import (
 	"archive/tar"
-	"bytes"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -1036,27 +1034,6 @@ var defaultChiselYaml = `
 			armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
 `
 
-type testArchive struct {
-	options archive.Options
-	pkgs    map[string][]byte
-}
-
-func (a *testArchive) Options() *archive.Options {
-	return &a.options
-}
-
-func (a *testArchive) Fetch(pkg string) (io.ReadCloser, error) {
-	if data, ok := a.pkgs[pkg]; ok {
-		return io.NopCloser(bytes.NewBuffer(data)), nil
-	}
-	return nil, fmt.Errorf("attempted to open %q package", pkg)
-}
-
-func (a *testArchive) Exists(pkg string) bool {
-	_, ok := a.pkgs[pkg]
-	return ok
-}
-
 func (s *S) TestRun(c *C) {
 	// Run tests for format chisel-v1.
 	runSlicerTests(c, slicerTests)
@@ -1110,15 +1087,15 @@ func runSlicerTests(c *C, tests []slicerTest) {
 
 			archives := map[string]archive.Archive{}
 			for name, setupArchive := range release.Archives {
-				archive := &testArchive{
-					options: archive.Options{
+				archive := &testutil.TestArchive{
+					Opts: archive.Options{
 						Label:      setupArchive.Name,
 						Version:    setupArchive.Version,
 						Suites:     setupArchive.Suites,
 						Components: setupArchive.Components,
 						Arch:       test.arch,
 					},
-					pkgs: test.pkgs,
+					Pkgs: test.pkgs,
 				}
 				archives[name] = archive
 			}
