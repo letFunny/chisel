@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/klauspost/compress/zstd"
+
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
@@ -97,7 +99,7 @@ func Run(options *RunOptions) (*Report, error) {
 			extractPackage = make(map[string][]deb.ExtractInfo)
 			extract[slice.Package] = extractPackage
 		}
-		arch := packages[slice.Package].arch
+		arch := packages[slice.Package].archive.Options().Arch
 		copyrightPath := "/usr/share/doc/" + slice.Package + "/copyright"
 		hasCopyright := false
 		for targetPath, pathInfo := range slice.Contents {
@@ -219,8 +221,8 @@ func Run(options *RunOptions) (*Report, error) {
 		})
 		reader.Close()
 		packages[slice.Package] = packageData{
-			reader: nil,
-			arch:   packages[slice.Package].arch,
+			reader:  nil,
+			archive: packages[slice.Package].archive,
 		}
 		if err != nil {
 			return nil, err
@@ -230,7 +232,7 @@ func Run(options *RunOptions) (*Report, error) {
 	// Create new content not coming from packages.
 	done := make(map[string]bool)
 	for _, slice := range options.Selection.Slices {
-		arch := packages[slice.Package].arch
+		arch := packages[slice.Package].archive.Options().Arch
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
@@ -288,6 +290,54 @@ func Run(options *RunOptions) (*Report, error) {
 		return nil, err
 	}
 
+	// Generate manifest.wall
+	// TODO change chisel.db to manifest.wall everywhere
+	manifestSlices := locateManifestSlices(options.Selection.Slices)
+	if len(manifestSlices) > 0 {
+		pkgInfo := []*archive.PackageInfo{}
+		for pkg, data := range packages {
+			info, err := data.archive.Info(pkg)
+			if err != nil {
+				return nil, err
+			}
+			pkgInfo = append(pkgInfo, info)
+		}
+		manifestWriter, err := generateDB(&generateDBOptions{
+			ManifestSlices: manifestSlices,
+			PackageInfo:    pkgInfo,
+			Slices:         options.Selection.Slices,
+			Report:         report,
+		})
+		if err != nil {
+			return nil, err
+		}
+		files := []io.Writer{}
+		for generatePath := range manifestSlices {
+			relPath := getManifestPath(generatePath)
+			logf("Generating manifest at %s...", relPath)
+			absPath := filepath.Join(options.TargetDir, relPath)
+			if err = os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+				return nil, err
+			}
+			file, err := os.OpenFile(absPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, dbMode)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, file)
+			defer file.Close()
+		}
+		w, err := zstd.NewWriter(io.MultiWriter(files...))
+		if err != nil {
+			return nil, err
+		}
+		defer w.Close()
+		_, err = manifestWriter.WriteTo(w)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// TODO remove report.
 	return report, nil
 }
 
@@ -387,8 +437,8 @@ func createFile(targetPath string, pathInfo setup.PathInfo) (*fsutil.Entry, erro
 }
 
 type packageData struct {
-	reader io.ReadCloser
-	arch   string
+	reader  io.ReadCloser
+	archive archive.Archive
 }
 
 // fetchPackages fetches all packages using the selection order.
@@ -420,8 +470,8 @@ func fetchPackages(options *RunOptions) (map[string]packageData, error) {
 			return nil, err
 		}
 		packages[slice.Package] = packageData{
-			reader: reader,
-			arch:   archive.Options().Arch,
+			reader:  reader,
+			archive: archive,
 		}
 	}
 	return packages, nil
