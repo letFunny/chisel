@@ -12,27 +12,6 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
-// selectPkgArchives selects the appropriate archive for each selected slice
-// package. It returns a map of archives indexed by package names.
-func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Selection) (map[string]archive.Archive, error) {
-	pkgArchives := make(map[string]archive.Archive)
-	for _, s := range selection.Slices {
-		pkg := selection.Release.Packages[s.Package]
-		if _, ok := pkgArchives[pkg.Name]; ok {
-			continue
-		}
-		archive := archives[pkg.Archive]
-		if archive == nil {
-			return nil, fmt.Errorf("archive %q not defined", pkg.Archive)
-		}
-		if !archive.Exists(pkg.Name) {
-			return nil, fmt.Errorf("slice package %q missing from archive", pkg.Name)
-		}
-		pkgArchives[pkg.Name] = archive
-	}
-	return pkgArchives, nil
-}
-
 func unixPerm(mode fs.FileMode) (perm uint32) {
 	perm = uint32(mode.Perm())
 	if mode&fs.ModeSticky != 0 {
