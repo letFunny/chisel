@@ -229,31 +229,52 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 	}
 
-	// Create new content not coming from packages.
-	done := make(map[string]bool)
+	// Create new content not coming from packages. First group them by their
+	// relative path. Then create them and attribute them to the appropriate
+	// slices.
+	type contentNotInPkg struct {
+		// We have validated all the pathInfos to be the same so we can store
+		// one of them.
+		pathInfo setup.PathInfo
+		slices   []*setup.Slice
+	}
+	contentRelPaths := map[string]contentNotInPkg{}
 	for _, slice := range options.Selection.Slices {
 		arch := packages[slice.Package].archive.Options().Arch
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
 			}
-			if done[relPath] || pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath {
+			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath {
 				continue
 			}
-			done[relPath] = true
-			data := pathData{
-				until:   pathInfo.Until,
-				mutable: pathInfo.Mutable,
+			if _, ok := contentRelPaths[relPath]; !ok {
+				contentRelPaths[relPath] = contentNotInPkg{
+					pathInfo: pathInfo,
+					slices:   []*setup.Slice{slice},
+				}
+			} else {
+				targetPath := contentRelPaths[relPath]
+				targetPath.slices = append(targetPath.slices, slice)
+				contentRelPaths[relPath] = targetPath
 			}
-			addKnownPath(knownPaths, relPath, data)
-			targetPath := filepath.Join(targetDir, relPath)
-			entry, err := createFile(targetPath, pathInfo)
-			if err != nil {
-				return nil, err
-			}
+		}
+	}
+	for relPath, content := range contentRelPaths {
+		data := pathData{
+			until:   content.pathInfo.Until,
+			mutable: content.pathInfo.Mutable,
+		}
+		addKnownPath(knownPaths, relPath, data)
+		targetPath := filepath.Join(targetDir, relPath)
+		entry, err := createFile(targetPath, content.pathInfo)
+		if err != nil {
+			return nil, err
+		}
 
-			// Do not add paths with "until: mutate".
-			if pathInfo.Until != setup.UntilMutate {
+		// Do not add paths with "until: mutate".
+		if content.pathInfo.Until != setup.UntilMutate {
+			for _, slice := range content.slices {
 				err = report.Add(slice, entry)
 				if err != nil {
 					return nil, err
