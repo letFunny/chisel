@@ -4,7 +4,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -46,17 +45,19 @@ type Content struct {
 	Path  string `json:"path"`
 }
 
-// GetManifestPath parses the "generate" glob path to get the regular path to its
-// directory.
-// TODO combine with isManifestPath or whatever it was called + bool flag.
-func GetManifestPath(generatePath string) string {
-	dir := filepath.Clean(strings.TrimSuffix(generatePath, "**"))
-	return filepath.Join(dir, Filename)
+// GetManifestPath parses the "generate" glob path and returns the path to
+// the manifest within that directory.
+// TODO no me gusta esta función.
+func GetManifestPath(generatePath string) (string, error) {
+	dir, err := setup.GetGeneratePath(generatePath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, Filename), nil
 }
 
 // LocateManifestSlices finds the paths marked with "generate:manifest" and
-// returns a map from said path to all the slices that declare it.
-// TODO change visibility or move it to another package.
+// returns a map from path to all the slices that declare it.
 func LocateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
 	manifestSlices := make(map[string][]*setup.Slice)
 	for _, s := range slices {

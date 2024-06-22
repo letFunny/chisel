@@ -1086,7 +1086,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				Name:      "manifest",
 				Essential: nil,
 				Contents: map[string]setup.PathInfo{
-					"/chisel-data/": setup.PathInfo{
+					"/chisel-data/**": setup.PathInfo{
 						Kind:     "generate",
 						Generate: "manifest",
 					},
@@ -1135,8 +1135,9 @@ func runSlicerTests(c *C, tests []slicerTest) {
 
 			manifestSlices := manifest.LocateManifestSlices(selection.Slices)
 			manifestPath := ""
-			for relPath, _ := range manifestSlices {
-				manifestPath = path.Join(relPath, manifest.Filename)
+			for generatePath := range manifestSlices {
+				manifestPath, err = manifest.GetManifestPath(generatePath)
+				c.Assert(err, IsNil)
 				break
 			}
 			c.Assert(manifestPath, Not(Equals), "")

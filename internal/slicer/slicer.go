@@ -517,8 +517,11 @@ func generateManifests(options *generateManifestsOptions) error {
 	}
 	// Add the manifest path and content entries to the db.
 	manifestSlices := manifest.LocateManifestSlices(options.SelectionSlices)
-	for path, slices := range manifestSlices {
-		fPath := manifest.GetManifestPath(path)
+	for generatePath, slices := range manifestSlices {
+		fPath, err := manifest.GetManifestPath(generatePath)
+		if err != nil {
+			return err
+		}
 		sliceNames := []string{}
 		for _, s := range slices {
 			err := jsonwallw.Add(&manifest.Content{
@@ -532,7 +535,7 @@ func generateManifests(options *generateManifestsOptions) error {
 			sliceNames = append(sliceNames, s.String())
 		}
 		sort.Strings(sliceNames)
-		err := jsonwallw.Add(&manifest.Path{
+		err = jsonwallw.Add(&manifest.Path{
 			Kind:   "path",
 			Path:   fPath,
 			Mode:   fmt.Sprintf("0%o", unixPerm(manifest.Mode)),
@@ -545,7 +548,10 @@ func generateManifests(options *generateManifestsOptions) error {
 
 	files := []io.Writer{}
 	for generatePath := range manifestSlices {
-		relPath := manifest.GetManifestPath(generatePath)
+		relPath, err := manifest.GetManifestPath(generatePath)
+		if err != nil {
+			return err
+		}
 		logf("Generating manifest at %s...", relPath)
 		absPath := filepath.Join(options.TargetDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
