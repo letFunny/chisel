@@ -12,7 +12,7 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
-const Filename = "chisel.db"
+const Filename = "manifest.wall"
 const Schema = "1.0"
 const Mode fs.FileMode = 0644
 

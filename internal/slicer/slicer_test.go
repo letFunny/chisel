@@ -1136,26 +1136,26 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			manifestSlices := manifest.LocateManifestSlices(selection.Slices)
 			manifestPath := ""
 			for relPath, _ := range manifestSlices {
-				manifestPath = path.Join(relPath, "chisel.db")
+				manifestPath = path.Join(relPath, manifest.Filename)
 				break
 			}
 			c.Assert(manifestPath, Not(Equals), "")
-			manifest, err := manifest.ReadManifest(targetDir, manifestPath)
+			mfest, err := manifest.ReadManifest(targetDir, manifestPath)
 			c.Assert(err, IsNil)
 
 			if test.filesystem != nil {
 				filesystem := testutil.TreeDump(targetDir)
 				c.Assert(filesystem["/chisel-data/"], Not(HasLen), 0)
-				c.Assert(filesystem["/chisel-data/chisel.db"], Not(HasLen), 0)
+				c.Assert(filesystem[path.Join("/chisel-data/", manifest.Filename)], Not(HasLen), 0)
 				delete(filesystem, "/chisel-data/")
-				delete(filesystem, "/chisel-data/chisel.db")
+				delete(filesystem, path.Join("/chisel-data/", manifest.Filename))
 				c.Assert(filesystem, DeepEquals, test.filesystem)
 			}
 
 			if test.report != nil {
-				manifestDump := treeDumpManifest(manifest.Paths)
-				c.Assert(manifestDump["/chisel-data/chisel.db"], Not(HasLen), 0)
-				delete(manifestDump, "/chisel-data/chisel.db")
+				manifestDump := treeDumpManifest(mfest.Paths)
+				c.Assert(manifestDump[path.Join("/chisel-data/", manifest.Filename)], Not(HasLen), 0)
+				delete(manifestDump, path.Join("/chisel-data/", manifest.Filename))
 				c.Assert(manifestDump, DeepEquals, test.report)
 			}
 		}

@@ -328,7 +328,6 @@ func Run(options *RunOptions) (*Report, error) {
 	}
 
 	// Generate manifest.wall.
-	// TODO change chisel.db to manifest.wall everywhere
 	manifestSlices := manifest.LocateManifestSlices(options.Selection.Slices)
 	if len(manifestSlices) > 0 {
 		pkgInfos := []*archive.PackageInfo{}
