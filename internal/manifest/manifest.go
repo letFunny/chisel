@@ -72,12 +72,22 @@ func LocateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
 	return manifestSlices
 }
 
-func ReadManifest(rootDir string, relPath string) ([]Path, error) {
+type Manifest struct {
+	Paths    []Path
+	Contents []Content
+	Packages []Package
+	Slices   []Slice
+}
+
+// TODO a function to validate?
+
+func ReadManifest(rootDir string, relPath string) (*Manifest, error) {
 	absPath := filepath.Join(rootDir, relPath)
 	file, err := os.OpenFile(absPath, os.O_RDONLY, Mode)
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 	r, err := zstd.NewReader(file)
 	if err != nil {
 		return nil, err
@@ -87,18 +97,54 @@ func ReadManifest(rootDir string, relPath string) ([]Path, error) {
 	if err != nil {
 		return nil, err
 	}
+	var manifest Manifest
 	iter, err := jsonwallDB.Iterate(map[string]string{"kind": "path"})
 	if err != nil {
 		return nil, err
 	}
-	var paths []Path
 	for iter.Next() {
 		var path Path
 		err := iter.Get(&path)
 		if err != nil {
 			return nil, err
 		}
-		paths = append(paths, path)
+		manifest.Paths = append(manifest.Paths, path)
 	}
-	return paths, nil
+	iter, err = jsonwallDB.Iterate(map[string]string{"kind": "content"})
+	if err != nil {
+		return nil, err
+	}
+	for iter.Next() {
+		var content Content
+		err := iter.Get(&content)
+		if err != nil {
+			return nil, err
+		}
+		manifest.Contents = append(manifest.Contents, content)
+	}
+	iter, err = jsonwallDB.Iterate(map[string]string{"kind": "package"})
+	if err != nil {
+		return nil, err
+	}
+	for iter.Next() {
+		var pkg Package
+		err := iter.Get(&pkg)
+		if err != nil {
+			return nil, err
+		}
+		manifest.Packages = append(manifest.Packages, pkg)
+	}
+	iter, err = jsonwallDB.Iterate(map[string]string{"kind": "slice"})
+	if err != nil {
+		return nil, err
+	}
+	for iter.Next() {
+		var slice Slice
+		err := iter.Get(&slice)
+		if err != nil {
+			return nil, err
+		}
+		manifest.Slices = append(manifest.Slices, slice)
+	}
+	return &manifest, nil
 }

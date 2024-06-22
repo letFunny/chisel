@@ -1153,7 +1153,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			}
 
 			if test.report != nil {
-				manifestDump := treeDumpManifest(manifest)
+				manifestDump := treeDumpManifest(manifest.Paths)
 				c.Assert(manifestDump["/chisel-data/chisel.db"], Not(HasLen), 0)
 				delete(manifestDump, "/chisel-data/chisel.db")
 				c.Assert(manifestDump, DeepEquals, test.report)
