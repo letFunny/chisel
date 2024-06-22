@@ -23,15 +23,16 @@ var (
 )
 
 type slicerTest struct {
-	summary    string
-	arch       string
-	release    map[string]string
-	pkgs       map[string][]byte
-	slices     []setup.SliceKey
-	hackopt    func(c *C, opts *slicer.RunOptions)
-	filesystem map[string]string
-	report     map[string]string
-	error      string
+	summary       string
+	arch          string
+	release       map[string]string
+	pkgs          map[string][]byte
+	slices        []setup.SliceKey
+	hackopt       func(c *C, opts *slicer.RunOptions)
+	filesystem    map[string]string
+	manifestPaths map[string]string
+	manifestPkgs  map[string]string
+	error         string
 }
 
 var packageEntries = map[string][]testutil.TarEntry{
@@ -96,7 +97,7 @@ var slicerTests = []slicerTest{{
 		"/other-dir/":     "dir 0755",
 		"/other-dir/file": "symlink ../dir/file",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/file":       "file 0644 cc55e2ec {test-package_myslice}",
 		"/dir/file-copy":  "file 0644 cc55e2ec {test-package_myslice}",
 		"/dir/foo/bar/":   "dir 01777 {test-package_myslice}",
@@ -121,7 +122,7 @@ var slicerTests = []slicerTest{{
 		"/dir/nested/other-file": "file 0644 6b86b273",
 		"/dir/other-file":        "file 0644 63d5dd49",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/nested/other-file": "file 0644 6b86b273 {test-package_myslice}",
 		"/dir/other-file":        "file 0644 63d5dd49 {test-package_myslice}",
 	},
@@ -142,7 +143,7 @@ var slicerTests = []slicerTest{{
 		"/parent/":    "dir 01777", // This is the magic.
 		"/parent/new": "file 0644 5b41362b",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/parent/new": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
@@ -163,7 +164,7 @@ var slicerTests = []slicerTest{{
 		"/parent/permissions/":    "dir 0764",  // This is the magic.
 		"/parent/permissions/new": "file 0644 5b41362b",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/parent/permissions/new": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
@@ -183,7 +184,7 @@ var slicerTests = []slicerTest{{
 		"/parent/":     "dir 01777", // This is the magic.
 		"/parent/new/": "dir 0755",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/parent/new/": "dir 0755 {test-package_myslice}",
 	},
 }, {
@@ -207,7 +208,7 @@ var slicerTests = []slicerTest{{
 		"/parent/permissions/":     "dir 0764",  // This is the magic.
 		"/parent/permissions/file": "file 0755 722c14b3",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/parent/":                 "dir 01777 {test-package_myslice}",
 		"/parent/permissions/":     "dir 0764 {test-package_myslice}",
 		"/parent/permissions/file": "file 0755 722c14b3 {test-package_myslice}",
@@ -238,7 +239,7 @@ var slicerTests = []slicerTest{{
 		"/dir/nested/copy-1": "file 0644 84237a05",
 		"/dir/nested/copy-3": "file 0644 84237a05",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/nested/copy-1": "file 0644 84237a05 {test-package_myslice}",
 		"/dir/nested/copy-3": "file 0644 84237a05 {test-package_myslice}",
 		"/dir/text-file-1":   "file 0644 5b41362b {test-package_myslice}",
@@ -270,7 +271,7 @@ var slicerTests = []slicerTest{{
 		"/usr/share/doc/test-package/":          "dir 0755",
 		"/usr/share/doc/test-package/copyright": "file 0644 c2fca2aa",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/file": "file 0644 cc55e2ec {test-package_myslice}",
 	},
 }, {
@@ -307,11 +308,15 @@ var slicerTests = []slicerTest{{
 		"/file":     "file 0644 fc02ca0e",
 		"/foo/":     "dir 0755",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/foo/":     "dir 0755 {test-package_myslice}",
 		"/dir/file": "file 0644 cc55e2ec {test-package_myslice}",
 		"/bar/":     "dir 0755 {other-package_myslice}",
 		"/file":     "file 0644 fc02ca0e {other-package_myslice}",
+	},
+	manifestPkgs: map[string]string{
+		"test-package":  "test-package test-package_version test-package_arch test-package_hash",
+		"other-package": "other-package other-package_version other-package_arch other-package_hash",
 	},
 }, {
 	summary: "Install two packages, explicit path has preference over implicit parent",
@@ -347,7 +352,7 @@ var slicerTests = []slicerTest{{
 		"/dir/":     "dir 01777",
 		"/dir/file": "file 0644 a441b15f",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/":     "dir 01777 {explicit-dir_myslice}",
 		"/dir/file": "file 0644 a441b15f {implicit-parent_myslice}",
 	},
@@ -379,7 +384,7 @@ var slicerTests = []slicerTest{{
 	filesystem: map[string]string{
 		"/textFile": "file 0644 c6c83d10",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/textFile": "file 0644 c6c83d10 {other-package_myslice,test-package_myslice}",
 	},
 }, {
@@ -400,7 +405,7 @@ var slicerTests = []slicerTest{{
 		"/dir/":          "dir 0755",
 		"/dir/text-file": "file 0644 d98cf53e",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/text-file": "file 0644 5b41362b d98cf53e {test-package_myslice}",
 	},
 }, {
@@ -425,7 +430,7 @@ var slicerTests = []slicerTest{{
 		"/foo/":            "dir 0755",
 		"/foo/text-file-2": "file 0644 5b41362b",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/text-file-1": "file 0644 5b41362b {test-package_myslice}",
 		"/foo/text-file-2": "file 0644 d98cf53e 5b41362b {test-package_myslice}",
 	},
@@ -450,7 +455,7 @@ var slicerTests = []slicerTest{{
 		"/foo/":            "dir 0755",
 		"/foo/text-file-2": "file 0644 5b41362b",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/foo/text-file-2": "file 0644 d98cf53e 5b41362b {test-package_myslice}",
 	},
 }, {
@@ -470,7 +475,7 @@ var slicerTests = []slicerTest{{
 		"/dir/":       "dir 0755",
 		"/other-dir/": "dir 0755",
 	},
-	report: map[string]string{},
+	manifestPaths: map[string]string{},
 }, {
 	summary: "Script: 'until' does not remove non-empty directories",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
@@ -489,7 +494,7 @@ var slicerTests = []slicerTest{{
 		"/dir/nested/":          "dir 0755",
 		"/dir/nested/file-copy": "file 0644 cc55e2ec",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/nested/file-copy": "file 0644 cc55e2ec {test-package_myslice}",
 	},
 }, {
@@ -510,7 +515,7 @@ var slicerTests = []slicerTest{{
 		"/dir/":          "dir 0755",
 		"/dir/text-file": "file 0644 5b41362b",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/text-file": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
@@ -780,13 +785,19 @@ var slicerTests = []slicerTest{{
 						/dir/nested/file:
 		`,
 	},
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		delete(opts.Archives, "foo")
+	},
 	filesystem: map[string]string{
 		"/dir/":            "dir 0755",
 		"/dir/nested/":     "dir 0755",
 		"/dir/nested/file": "file 0644 84237a05",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/nested/file": "file 0644 84237a05 {test-package_myslice}",
+	},
+	manifestPkgs: map[string]string{
+		"test-package": "test-package test-package_version test-package_arch test-package_hash",
 	},
 }, {
 	summary: "Multiple slices of same package",
@@ -819,7 +830,7 @@ var slicerTests = []slicerTest{{
 		"/other-dir/":     "dir 0755",
 		"/other-dir/file": "symlink ../dir/file",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/file":       "file 0644 cc55e2ec {test-package_myslice1}",
 		"/dir/file-copy":  "file 0644 cc55e2ec {test-package_myslice1}",
 		"/dir/foo/bar/":   "dir 01777 {test-package_myslice1}",
@@ -860,7 +871,7 @@ var slicerTests = []slicerTest{{
 		"/dir/other-file":               "file 0644 63d5dd49",
 		"/dir/several/levels/deep/":     "dir 0755",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/":                         "dir 0755 {test-package_myslice2}",
 		"/dir/file":                     "file 0644 cc55e2ec {test-package_myslice2}",
 		"/dir/nested/":                  "dir 0755 {test-package_myslice2}",
@@ -906,7 +917,7 @@ var slicerTests = []slicerTest{{
 		"/dir/several/levels/deep/":     "dir 0755",
 		"/dir/several/levels/deep/file": "file 0644 6bc26dff",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/":                         "dir 0755 {test-package_myslice1}",
 		"/dir/file":                     "file 0644 cc55e2ec {test-package_myslice1}",
 		"/dir/nested/":                  "dir 0755 {test-package_myslice1}",
@@ -952,7 +963,7 @@ var slicerTests = []slicerTest{{
 		"/dir/several/levels/deep/":     "dir 0755",
 		"/dir/several/levels/deep/file": "file 0644 6bc26dff",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/":                         "dir 0755 {test-package_myslice1}",
 		"/dir/file":                     "file 0644 cc55e2ec {test-package_myslice1}",
 		"/dir/nested/":                  "dir 0755 {test-package_myslice1}",
@@ -990,7 +1001,7 @@ var slicerTests = []slicerTest{{
 		"/dir/":     "dir 0755",
 		"/dir/file": "file 0644 cc55e2ec",
 	},
-	report: map[string]string{
+	manifestPaths: map[string]string{
 		"/dir/file": "file 0644 cc55e2ec {test-package_myslice2}",
 	},
 }, {
@@ -1015,8 +1026,8 @@ var slicerTests = []slicerTest{{
 						content.read("/dir/file")
 		`,
 	},
-	filesystem: map[string]string{},
-	report:     map[string]string{},
+	filesystem:    map[string]string{},
+	manifestPaths: map[string]string{},
 }}
 
 var defaultChiselYaml = `
@@ -1153,15 +1164,21 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				c.Assert(filesystem, DeepEquals, test.filesystem)
 			}
 
-			if test.report != nil {
+			if test.manifestPaths != nil {
 				manifestDump := treeDumpManifest(mfest.Paths)
 				c.Assert(manifestDump[path.Join("/chisel-data/", manifest.Filename)], Not(HasLen), 0)
 				delete(manifestDump, path.Join("/chisel-data/", manifest.Filename))
-				c.Assert(manifestDump, DeepEquals, test.report)
+				c.Assert(manifestDump, DeepEquals, test.manifestPaths)
+			}
+
+			if test.manifestPkgs != nil {
+				c.Assert(dumpPackages(mfest.Packages), DeepEquals, test.manifestPkgs)
 			}
 		}
 	}
 }
+
+// TODO tests for packages in the DB.
 
 func treeDumpManifest(entries []manifest.Path) map[string]string {
 	result := make(map[string]string)
@@ -1189,6 +1206,14 @@ func treeDumpManifest(entries []manifest.Path) map[string]string {
 		}
 		sort.Strings(slicesStr)
 		result[entry.Path] = fmt.Sprintf("%s {%s}", fsDump, strings.Join(slicesStr, ","))
+	}
+	return result
+}
+
+func dumpPackages(pkgs []manifest.Package) map[string]string {
+	result := map[string]string{}
+	for _, pkg := range pkgs {
+		result[pkg.Name] = fmt.Sprintf("%s %s %s %s", pkg.Name, pkg.Version, pkg.Arch, pkg.Digest)
 	}
 	return result
 }
