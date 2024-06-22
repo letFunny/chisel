@@ -2,14 +2,17 @@ package slicer_test
 
 import (
 	"archive/tar"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	. "gopkg.in/check.v1"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/manifest"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
 	"github.com/canonical/chisel/internal/testutil"
@@ -1130,14 +1133,14 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				continue
 			}
 
-			manifestSlices := slicer.LocateManifestSlices(selection.Slices)
+			manifestSlices := manifest.LocateManifestSlices(selection.Slices)
 			manifestPath := ""
 			for relPath, _ := range manifestSlices {
 				manifestPath = path.Join(relPath, "chisel.db")
 				break
 			}
 			c.Assert(manifestPath, Not(Equals), "")
-			manifest, err := slicer.ReadManifest(targetDir, manifestPath)
+			manifest, err := manifest.ReadManifest(targetDir, manifestPath)
 			c.Assert(err, IsNil)
 
 			if test.filesystem != nil {
@@ -1150,11 +1153,41 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			}
 
 			if test.report != nil {
-				manifestDump := slicer.TreeDumpManifest(manifest)
+				manifestDump := treeDumpManifest(manifest)
 				c.Assert(manifestDump["/chisel-data/chisel.db"], Not(HasLen), 0)
 				delete(manifestDump, "/chisel-data/chisel.db")
 				c.Assert(manifestDump, DeepEquals, test.report)
 			}
 		}
 	}
+}
+
+func treeDumpManifest(entries []manifest.Path) map[string]string {
+	result := make(map[string]string)
+	for _, entry := range entries {
+		var fsDump string
+		switch {
+		case strings.HasSuffix(entry.Path, "/"):
+			fsDump = fmt.Sprintf("dir %s", entry.Mode)
+		case entry.Link != "":
+			fsDump = fmt.Sprintf("symlink %s", entry.Link)
+		default: // Regular
+			if entry.Size == 0 {
+				fsDump = fmt.Sprintf("file %s empty", entry.Mode)
+			} else if entry.FinalHash != "" {
+				fsDump = fmt.Sprintf("file %s %s %s", entry.Mode, entry.Hash[:8], entry.FinalHash[:8])
+			} else {
+				fsDump = fmt.Sprintf("file %s %s", entry.Mode, entry.Hash[:8])
+			}
+		}
+
+		// append {slice1, ..., sliceN} to the end of the entry dump.
+		slicesStr := make([]string, 0, len(entry.Slices))
+		for _, slice := range entry.Slices {
+			slicesStr = append(slicesStr, slice)
+		}
+		sort.Strings(slicesStr)
+		result[entry.Path] = fmt.Sprintf("%s {%s}", fsDump, strings.Join(slicesStr, ","))
+	}
+	return result
 }
