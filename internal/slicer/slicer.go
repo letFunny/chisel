@@ -257,7 +257,8 @@ func Run(options *RunOptions) (*Report, error) {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
 			}
-			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath {
+			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath ||
+				pathInfo.Kind == setup.GeneratePath {
 				continue
 			}
 			if _, ok := contentRelPaths[relPath]; !ok {
@@ -325,7 +326,7 @@ func Run(options *RunOptions) (*Report, error) {
 
 	// Generate manifest.wall
 	// TODO change chisel.db to manifest.wall everywhere
-	manifestSlices := locateManifestSlices(options.Selection.Slices)
+	manifestSlices := LocateManifestSlices(options.Selection.Slices)
 	if len(manifestSlices) > 0 {
 		pkgInfo := []*archive.PackageInfo{}
 		for pkg, _ := range packages {

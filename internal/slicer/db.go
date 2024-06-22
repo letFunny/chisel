@@ -162,9 +162,10 @@ func getManifestPath(generatePath string) string {
 	return filepath.Join(dir, dbFile)
 }
 
-// locateManifestSlices finds the paths marked with "generate:manifest" and
+// LocateManifestSlices finds the paths marked with "generate:manifest" and
 // returns a map from said path to all the slices that declare it.
-func locateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
+// TODO change visibility or move it to another package.
+func LocateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
 	manifestSlices := make(map[string][]*setup.Slice)
 	for _, s := range slices {
 		for path, info := range s.Contents {
@@ -177,6 +178,10 @@ func locateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
 		}
 	}
 	return manifestSlices
+}
+
+func ReadManifest(path string) {
+
 }
 
 /* db.go */

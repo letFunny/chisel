@@ -86,14 +86,16 @@ var slicerTests = []slicerTest{{
 		`,
 	},
 	filesystem: map[string]string{
-		"/dir/":           "dir 0755",
-		"/dir/file":       "file 0644 cc55e2ec",
-		"/dir/file-copy":  "file 0644 cc55e2ec",
-		"/dir/foo/":       "dir 0755",
-		"/dir/foo/bar/":   "dir 01777",
-		"/dir/text-file":  "file 0644 5b41362b",
-		"/other-dir/":     "dir 0755",
-		"/other-dir/file": "symlink ../dir/file",
+		"/chisel-data/":          "dir 0755",
+		"/chisel-data/chisel.db": "file 0644 fe34c06a",
+		"/dir/":                  "dir 0755",
+		"/dir/file":              "file 0644 cc55e2ec",
+		"/dir/file-copy":         "file 0644 cc55e2ec",
+		"/dir/foo/":              "dir 0755",
+		"/dir/foo/bar/":          "dir 01777",
+		"/dir/text-file":         "file 0644 5b41362b",
+		"/other-dir/":            "dir 0755",
+		"/other-dir/file":        "symlink ../dir/file",
 	},
 	report: map[string]string{
 		"/dir/file":       "file 0644 cc55e2ec {test-package_myslice}",
@@ -1079,6 +1081,23 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			release, err := setup.ReadRelease(releaseDir)
 			c.Assert(err, IsNil)
 
+			release.Packages["test-package"].Slices["manifest"] = &setup.Slice{
+				Package:   "test-package",
+				Name:      "manifest",
+				Essential: nil,
+				Contents: map[string]setup.PathInfo{
+					"/chisel-data/": setup.PathInfo{
+						Kind:     "generate",
+						Generate: "manifest",
+					},
+				},
+				Scripts: setup.SliceScripts{},
+			}
+			slices = append(slices, setup.SliceKey{
+				Package: "test-package",
+				Slice:   "manifest",
+			})
+
 			selection, err := setup.Select(release, slices)
 			c.Assert(err, IsNil)
 
@@ -1113,6 +1132,9 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				c.Assert(err, ErrorMatches, test.error)
 				continue
 			}
+
+			manifests := slicer.LocateManifestSlices(selection.Slices)
+			fmt.Println(manifests)
 
 			if test.filesystem != nil {
 				c.Assert(testutil.TreeDump(targetDir), DeepEquals, test.filesystem)

@@ -100,9 +100,10 @@ type PathInfo struct {
 	Info string
 	Mode uint
 
-	Mutable  bool
-	Until    PathUntil
-	Arch     []string
+	Mutable bool
+	Until   PathUntil
+	Arch    []string
+	// TODO we probably should use info.
 	Generate GenerateKind
 }
 
