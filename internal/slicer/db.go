@@ -3,9 +3,12 @@ package slicer
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/jsonwall"
@@ -180,8 +183,65 @@ func LocateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
 	return manifestSlices
 }
 
-func ReadManifest(path string) {
+func ReadManifest(rootDir string, relPath string) ([]dbPath, error) {
+	absPath := filepath.Join(rootDir, relPath)
+	file, err := os.OpenFile(absPath, os.O_RDONLY, dbMode)
+	if err != nil {
+		return nil, err
+	}
+	r, err := zstd.NewReader(file)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	jsonwallDB, err := jsonwall.ReadDB(r)
+	if err != nil {
+		return nil, err
+	}
+	iter, err := jsonwallDB.Iterate(map[string]string{"kind": "path"})
+	if err != nil {
+		return nil, err
+	}
+	var paths []dbPath
+	for iter.Next() {
+		var path dbPath
+		err := iter.Get(&path)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
 
+func TreeDumpManifest(entries []dbPath) map[string]string {
+	result := make(map[string]string)
+	for _, entry := range entries {
+		var fsDump string
+		switch {
+		case strings.HasSuffix(entry.Path, "/"):
+			fsDump = fmt.Sprintf("dir %s", entry.Mode)
+		case entry.Link != "":
+			fsDump = fmt.Sprintf("symlink %s", entry.Link)
+		default: // Regular
+			if entry.Size == 0 {
+				fsDump = fmt.Sprintf("file %s empty", entry.Mode)
+			} else if entry.FinalHash != "" {
+				fsDump = fmt.Sprintf("file %s %s %s", entry.Mode, entry.Hash[:8], entry.FinalHash[:8])
+			} else {
+				fsDump = fmt.Sprintf("file %s %s", entry.Mode, entry.Hash[:8])
+			}
+		}
+
+		// append {slice1, ..., sliceN} to the end of the entry dump.
+		slicesStr := make([]string, 0, len(entry.Slices))
+		for _, slice := range entry.Slices {
+			slicesStr = append(slicesStr, slice)
+		}
+		sort.Strings(slicesStr)
+		result[entry.Path] = fmt.Sprintf("%s {%s}", fsDump, strings.Join(slicesStr, ","))
+	}
+	return result
 }
 
 /* db.go */

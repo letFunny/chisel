@@ -2,11 +2,9 @@ package slicer_test
 
 import (
 	"archive/tar"
-	"fmt"
-	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	. "gopkg.in/check.v1"
@@ -86,16 +84,14 @@ var slicerTests = []slicerTest{{
 		`,
 	},
 	filesystem: map[string]string{
-		"/chisel-data/":          "dir 0755",
-		"/chisel-data/chisel.db": "file 0644 fe34c06a",
-		"/dir/":                  "dir 0755",
-		"/dir/file":              "file 0644 cc55e2ec",
-		"/dir/file-copy":         "file 0644 cc55e2ec",
-		"/dir/foo/":              "dir 0755",
-		"/dir/foo/bar/":          "dir 01777",
-		"/dir/text-file":         "file 0644 5b41362b",
-		"/other-dir/":            "dir 0755",
-		"/other-dir/file":        "symlink ../dir/file",
+		"/dir/":           "dir 0755",
+		"/dir/file":       "file 0644 cc55e2ec",
+		"/dir/file-copy":  "file 0644 cc55e2ec",
+		"/dir/foo/":       "dir 0755",
+		"/dir/foo/bar/":   "dir 01777",
+		"/dir/text-file":  "file 0644 5b41362b",
+		"/other-dir/":     "dir 0755",
+		"/other-dir/file": "symlink ../dir/file",
 	},
 	report: map[string]string{
 		"/dir/file":       "file 0644 cc55e2ec {test-package_myslice}",
@@ -1081,8 +1077,9 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			release, err := setup.ReadRelease(releaseDir)
 			c.Assert(err, IsNil)
 
-			release.Packages["test-package"].Slices["manifest"] = &setup.Slice{
-				Package:   "test-package",
+			manifestPackage := test.slices[0].Package
+			release.Packages[manifestPackage].Slices["manifest"] = &setup.Slice{
+				Package:   manifestPackage,
 				Name:      "manifest",
 				Essential: nil,
 				Contents: map[string]setup.PathInfo{
@@ -1094,7 +1091,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				Scripts: setup.SliceScripts{},
 			}
 			slices = append(slices, setup.SliceKey{
-				Package: "test-package",
+				Package: manifestPackage,
 				Slice:   "manifest",
 			})
 
@@ -1125,7 +1122,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			if test.hackopt != nil {
 				test.hackopt(c, &options)
 			}
-			report, err := slicer.Run(&options)
+			_, err = slicer.Run(&options)
 			if test.error == "" {
 				c.Assert(err, IsNil)
 			} else {
@@ -1133,54 +1130,31 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				continue
 			}
 
-			manifests := slicer.LocateManifestSlices(selection.Slices)
-			fmt.Println(manifests)
+			manifestSlices := slicer.LocateManifestSlices(selection.Slices)
+			manifestPath := ""
+			for relPath, _ := range manifestSlices {
+				manifestPath = path.Join(relPath, "chisel.db")
+				break
+			}
+			c.Assert(manifestPath, Not(Equals), "")
+			manifest, err := slicer.ReadManifest(targetDir, manifestPath)
+			c.Assert(err, IsNil)
 
 			if test.filesystem != nil {
-				c.Assert(testutil.TreeDump(targetDir), DeepEquals, test.filesystem)
+				filesystem := testutil.TreeDump(targetDir)
+				c.Assert(filesystem["/chisel-data/"], Not(HasLen), 0)
+				c.Assert(filesystem["/chisel-data/chisel.db"], Not(HasLen), 0)
+				delete(filesystem, "/chisel-data/")
+				delete(filesystem, "/chisel-data/chisel.db")
+				c.Assert(filesystem, DeepEquals, test.filesystem)
 			}
 
 			if test.report != nil {
-				c.Assert(treeDumpReport(report), DeepEquals, test.report)
+				manifestDump := slicer.TreeDumpManifest(manifest)
+				c.Assert(manifestDump["/chisel-data/chisel.db"], Not(HasLen), 0)
+				delete(manifestDump, "/chisel-data/chisel.db")
+				c.Assert(manifestDump, DeepEquals, test.report)
 			}
 		}
 	}
-}
-
-// treeDumpReport returns the file information in the same format as
-// [testutil.TreeDump] with the added slices that have installed each path.
-func treeDumpReport(report *slicer.Report) map[string]string {
-	result := make(map[string]string)
-	for _, entry := range report.Entries {
-		fperm := entry.Mode.Perm()
-		if entry.Mode&fs.ModeSticky != 0 {
-			fperm |= 01000
-		}
-		var fsDump string
-		switch entry.Mode.Type() {
-		case fs.ModeDir:
-			fsDump = fmt.Sprintf("dir %#o", fperm)
-		case fs.ModeSymlink:
-			fsDump = fmt.Sprintf("symlink %s", entry.Link)
-		case 0: // Regular
-			if entry.Size == 0 {
-				fsDump = fmt.Sprintf("file %#o empty", entry.Mode.Perm())
-			} else if entry.FinalHash != "" {
-				fsDump = fmt.Sprintf("file %#o %s %s", fperm, entry.Hash[:8], entry.FinalHash[:8])
-			} else {
-				fsDump = fmt.Sprintf("file %#o %s", fperm, entry.Hash[:8])
-			}
-		default:
-			panic(fmt.Errorf("unknown file type %d: %s", entry.Mode.Type(), entry.Path))
-		}
-
-		// append {slice1, ..., sliceN} to the end of the entry dump.
-		slicesStr := make([]string, 0, len(entry.Slices))
-		for slice := range entry.Slices {
-			slicesStr = append(slicesStr, slice.String())
-		}
-		sort.Strings(slicesStr)
-		result[entry.Path] = fmt.Sprintf("%s {%s}", fsDump, strings.Join(slicesStr, ","))
-	}
-	return result
 }

@@ -365,6 +365,7 @@ func Run(options *RunOptions) (*Report, error) {
 			return nil, err
 		}
 		defer w.Close()
+		// TODO change name from manifestWriter.
 		_, err = manifestWriter.WriteTo(w)
 		if err != nil {
 			return nil, err
