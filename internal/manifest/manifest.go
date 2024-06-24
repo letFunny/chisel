@@ -1,9 +1,11 @@
 package manifest
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -80,8 +82,6 @@ type Manifest struct {
 	Slices   []Slice
 }
 
-// TODO a function to validate?
-
 func ReadManifest(rootDir string, relPath string) (*Manifest, error) {
 	absPath := filepath.Join(rootDir, relPath)
 	file, err := os.OpenFile(absPath, os.O_RDONLY, Mode)
@@ -98,7 +98,8 @@ func ReadManifest(rootDir string, relPath string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	var manifest Manifest
+
+	manifest := &Manifest{}
 	iter, err := jsonwallDB.Iterate(map[string]string{"kind": "path"})
 	if err != nil {
 		return nil, err
@@ -147,5 +148,51 @@ func ReadManifest(rootDir string, relPath string) (*Manifest, error) {
 		}
 		manifest.Slices = append(manifest.Slices, slice)
 	}
-	return &manifest, nil
+	err = Validate(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return manifest, nil
+}
+
+func Validate(manifest *Manifest) (err error) {
+	defer func() {
+		err = fmt.Errorf("invalid manifest: %s", err)
+	}()
+
+	pkgExist := map[string]bool{}
+	for _, pkg := range manifest.Packages {
+		if pkg.Kind != "package" {
+			return fmt.Errorf("")
+		}
+		pkgExist[pkg.Name] = true
+	}
+	sliceExist := map[string]bool{}
+	for _, slice := range manifest.Slices {
+		if slice.Kind != "slice" {
+			return fmt.Errorf("")
+		}
+		sliceExist[slice.Name] = true
+	}
+	pathToSlices := map[string][]string{}
+	for _, content := range manifest.Contents {
+		if content.Kind != "content" {
+			return fmt.Errorf("")
+		}
+		if _, ok := sliceExist[content.Slice]; !ok {
+			return fmt.Errorf("TODO")
+		}
+		pathToSlices[content.Path] = append(pathToSlices[content.Path], content.Slice)
+	}
+	for _, path := range manifest.Paths {
+		if path.Kind != "path" {
+			return fmt.Errorf("")
+		}
+		if pathSlices, ok := pathToSlices[path.Path]; !ok {
+			return fmt.Errorf("TODO")
+		} else if !slices.Equal(pathSlices, path.Slices) {
+			return fmt.Errorf("TODO")
+		}
+	}
+	return nil
 }
