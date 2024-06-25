@@ -1089,10 +1089,10 @@ func runSlicerTests(c *C, tests []slicerTest) {
 		for _, slices := range testutil.Permutations(test.slices) {
 			c.Logf("Summary: %s", test.summary)
 
+			// Defaults.
 			if _, ok := test.release["chisel.yaml"]; !ok {
-				test.release["chisel.yaml"] = string(defaultChiselYaml)
+				test.release["chisel.yaml"] = defaultChiselYaml
 			}
-
 			if test.pkgs == nil {
 				test.pkgs = map[string]testutil.TestPackage{
 					"test-package": {
@@ -1100,7 +1100,15 @@ func runSlicerTests(c *C, tests []slicerTest) {
 					},
 				}
 			}
+			for pkgName, pkg := range test.pkgs {
+				if pkg.Name == "" {
+					// We need to add the name for the manifest validation.
+					pkg.Name = pkgName
+				}
+				test.pkgs[pkgName] = pkg
+			}
 
+			// Create the files on disk.
 			releaseDir := c.MkDir()
 			for path, data := range test.release {
 				fpath := filepath.Join(releaseDir, path)
@@ -1110,9 +1118,11 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				c.Assert(err, IsNil)
 			}
 
+			// Read the releases from the files on disk.
 			release, err := setup.ReadRelease(releaseDir)
 			c.Assert(err, IsNil)
 
+			// Create a manifest slice and add it to the selection.
 			manifestPackage := test.slices[0].Package
 			release.Packages[manifestPackage].Slices["manifest"] = &setup.Slice{
 				Package:   manifestPackage,
@@ -1131,9 +1141,11 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				Slice:   "manifest",
 			})
 
+			// Get the selection.
 			selection, err := setup.Select(release, slices)
 			c.Assert(err, IsNil)
 
+			// Set up the archives.
 			archives := map[string]archive.Archive{}
 			for name, setupArchive := range release.Archives {
 				archive := &testutil.TestArchive{
@@ -1149,6 +1161,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				archives[name] = archive
 			}
 
+			// Create the root directory and cut the slice selection.
 			targetDir := c.MkDir()
 			options := slicer.RunOptions{
 				Selection: selection,
@@ -1166,6 +1179,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				continue
 			}
 
+			// Get the manifest from disk and read it.
 			manifestSlices := manifest.LocateManifestSlices(selection.Slices)
 			manifestPath := ""
 			for generatePath := range manifestSlices {
@@ -1174,9 +1188,10 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				break
 			}
 			c.Assert(manifestPath, Not(Equals), "")
-			mfest, err := manifest.ReadManifest(targetDir, manifestPath)
+			mfest, err := manifest.Read(targetDir, manifestPath)
 			c.Assert(err, IsNil)
 
+			// Assert state of final filesystem.
 			if test.filesystem != nil {
 				filesystem := testutil.TreeDump(targetDir)
 				c.Assert(filesystem["/chisel-data/"], Not(HasLen), 0)
@@ -1186,6 +1201,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				c.Assert(filesystem, DeepEquals, test.filesystem)
 			}
 
+			// Assert state of the files recorded in the manifest.
 			if test.manifestPaths != nil {
 				manifestDump := treeDumpManifest(mfest.Paths)
 				c.Assert(manifestDump[path.Join("/chisel-data/", manifest.Filename)], Not(HasLen), 0)
@@ -1193,6 +1209,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				c.Assert(manifestDump, DeepEquals, test.manifestPaths)
 			}
 
+			// Assert state of the packages recorded in the manifest.
 			if test.manifestPkgs != nil {
 				c.Assert(dumpPackages(mfest.Packages), DeepEquals, test.manifestPkgs)
 			}

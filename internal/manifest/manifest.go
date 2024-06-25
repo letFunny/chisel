@@ -82,7 +82,14 @@ type Manifest struct {
 	Slices   []Slice
 }
 
-func ReadManifest(rootDir string, relPath string) (*Manifest, error) {
+// TODO probably better to take io.Reader
+func Read(rootDir string, relPath string) (mfest *Manifest, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot read manifest: %s", err)
+		}
+	}()
+
 	absPath := filepath.Join(rootDir, relPath)
 	file, err := os.OpenFile(absPath, os.O_RDONLY, Mode)
 	if err != nil {
@@ -165,35 +172,42 @@ func Validate(manifest *Manifest) (err error) {
 	pkgExist := map[string]bool{}
 	for _, pkg := range manifest.Packages {
 		if pkg.Kind != "package" {
-			return fmt.Errorf("")
+			return fmt.Errorf(`in packages expected kind "package", got %q`, pkg.Kind)
 		}
 		pkgExist[pkg.Name] = true
 	}
 	sliceExist := map[string]bool{}
 	for _, slice := range manifest.Slices {
 		if slice.Kind != "slice" {
-			return fmt.Errorf("")
+			return fmt.Errorf(`in slices expected kind "slice", got %q`, slice.Kind)
+		}
+		sk, err := setup.ParseSliceKey(slice.Name)
+		if err != nil {
+			return err
+		}
+		if !pkgExist[sk.Package] {
+			return fmt.Errorf("package %q not found in packages", sk.Package)
 		}
 		sliceExist[slice.Name] = true
 	}
 	pathToSlices := map[string][]string{}
 	for _, content := range manifest.Contents {
 		if content.Kind != "content" {
-			return fmt.Errorf("")
+			return fmt.Errorf(`in contents expected kind "content", got "%s"`, content.Kind)
 		}
-		if _, ok := sliceExist[content.Slice]; !ok {
-			return fmt.Errorf("TODO")
+		if !sliceExist[content.Slice] {
+			return fmt.Errorf("slice %s not found in slices", content.Slice)
 		}
 		pathToSlices[content.Path] = append(pathToSlices[content.Path], content.Slice)
 	}
 	for _, path := range manifest.Paths {
 		if path.Kind != "path" {
-			return fmt.Errorf("")
+			return fmt.Errorf(`in paths expected kind "path", got "%s"`, path.Kind)
 		}
 		if pathSlices, ok := pathToSlices[path.Path]; !ok {
-			return fmt.Errorf("TODO")
+			return fmt.Errorf("path %s not found in contents", path.Path)
 		} else if !slices.Equal(pathSlices, path.Slices) {
-			return fmt.Errorf("TODO")
+			return fmt.Errorf("path %s and content have diverging slices: %q != %q", path.Path, path.Slices, pathSlices)
 		}
 	}
 	return nil
