@@ -14,7 +14,7 @@ var manifestTests = []struct {
 	summary string
 	input   string
 	mfest   *manifest.Manifest
-	err     string
+	error   string
 }{
 	{
 		summary: "All types",
@@ -63,19 +63,19 @@ var manifestTests = []struct {
 		input: `{"jsonwall":"1.0","schema":"1.0","count":1}
 {"kind":"content","slice":"pkg1_manifest","path":"/manifest/manifest.wall"}
 `,
-		err: `cannot read manifest: invalid manifest: slice pkg1_manifest not found in slices`,
+		error: `cannot read manifest: invalid manifest: slice pkg1_manifest not found in slices`,
 	}, {
 		summary: "Package not found",
 		input: `{"jsonwall":"1.0","schema":"1.0","count":1}
 {"kind":"slice","name":"pkg1_manifest"}
 `,
-		err: `cannot read manifest: invalid manifest: package "pkg1" not found in packages`,
+		error: `cannot read manifest: invalid manifest: package "pkg1" not found in packages`,
 	}, {
 		summary: "Path not found",
 		input: `{"jsonwall":"1.0","schema":"1.0","count":1}
 {"kind":"path","path":"/dir/","mode":"01777","slices":["pkg1_myslice"]}
 `,
-		err: `cannot read manifest: invalid manifest: path /dir/ not found in contents`,
+		error: `cannot read manifest: invalid manifest: path /dir/ not found in contents`,
 	}, {
 		summary: "Content and path have different slices",
 		input: `{"jsonwall":"1.0","schema":"1.0","count":3}
@@ -84,7 +84,7 @@ var manifestTests = []struct {
 {"kind":"path","path":"/dir/","mode":"01777","slices":["pkg1_myslice"]}
 {"kind":"slice","name":"pkg1_myotherslice"}
 `,
-		err: `cannot read manifest: invalid manifest: path /dir/ and content have diverging slices: \["pkg1_myslice"\] != \["pkg1_myotherslice"\]`,
+		error: `cannot read manifest: invalid manifest: path /dir/ and content have diverging slices: \["pkg1_myslice"\] != \["pkg1_myotherslice"\]`,
 	}}
 
 func (s *S) TestRun(c *C) {
@@ -102,8 +102,8 @@ func (s *S) TestRun(c *C) {
 		f.Close()
 
 		mfest, err := manifest.Read(tmpDir, "manifest.wall")
-		if test.err != "" {
-			c.Assert(err, ErrorMatches, test.err)
+		if test.error != "" {
+			c.Assert(err, ErrorMatches, test.error)
 			continue
 		}
 		c.Assert(err, IsNil)

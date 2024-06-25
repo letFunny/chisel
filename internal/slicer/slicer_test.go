@@ -280,18 +280,10 @@ var slicerTests = []slicerTest{{
 		{"other-package", "myslice"}},
 	pkgs: map[string]testutil.TestPackage{
 		"test-package": {
-			Name:    "test-package",
-			Hash:    "h1",
-			Version: "v1",
-			Arch:    "a1",
-			Data:    testutil.PackageData["test-package"],
+			Data: testutil.PackageData["test-package"],
 		},
 		"other-package": {
-			Name:    "other-package",
-			Hash:    "h2",
-			Version: "v2",
-			Arch:    "a2",
-			Data:    testutil.PackageData["other-package"],
+			Data: testutil.PackageData["other-package"],
 		},
 	},
 	release: map[string]string{
@@ -324,10 +316,6 @@ var slicerTests = []slicerTest{{
 		"/dir/file": "file 0644 cc55e2ec {test-package_myslice}",
 		"/bar/":     "dir 0755 {other-package_myslice}",
 		"/file":     "file 0644 fc02ca0e {other-package_myslice}",
-	},
-	manifestPkgs: map[string]string{
-		"test-package":  "test-package v1 a1 h1",
-		"other-package": "other-package v2 a2 h2",
 	},
 }, {
 	summary: "Install two packages, explicit path has preference over implicit parent",
@@ -1050,6 +1038,98 @@ var slicerTests = []slicerTest{{
 	manifestPaths: map[string]string{},
 }}
 
+var slicerPkgTests = []struct {
+	summary      string
+	arch         string
+	release      map[string]string
+	pkgs         map[string]testutil.TestPackage
+	slices       []setup.SliceKey
+	hackopt      func(c *C, opts *slicer.RunOptions)
+	manifestPkgs map[string]string
+	error        string
+}{
+	{
+		summary: "Install two packages",
+		slices: []setup.SliceKey{
+			{"test-package", "myslice"},
+			{"other-package", "myslice"},
+		},
+		pkgs: map[string]testutil.TestPackage{
+			"test-package": {
+				Name:    "test-package",
+				Hash:    "h1",
+				Version: "v1",
+				Arch:    "a1",
+				Data:    testutil.PackageData["test-package"],
+			},
+			"other-package": {
+				Name:    "other-package",
+				Hash:    "h2",
+				Version: "v2",
+				Arch:    "a2",
+				Data:    testutil.PackageData["other-package"],
+			},
+		},
+		release: map[string]string{
+			"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+		`,
+			"slices/mydir/other-package.yaml": `
+			package: other-package
+			slices:
+				myslice:
+					contents:
+		`,
+		},
+		manifestPkgs: map[string]string{
+			"test-package":  "test-package v1 a1 h1",
+			"other-package": "other-package v2 a2 h2",
+		},
+	},
+	{
+		summary: "Two packages, only one is selected",
+		slices: []setup.SliceKey{
+			{"test-package", "myslice"},
+		},
+		pkgs: map[string]testutil.TestPackage{
+			"test-package": {
+				Name:    "test-package",
+				Hash:    "h1",
+				Version: "v1",
+				Arch:    "a1",
+				Data:    testutil.PackageData["test-package"],
+			},
+			"other-package": {
+				Name:    "other-package",
+				Hash:    "h2",
+				Version: "v2",
+				Arch:    "a2",
+				Data:    testutil.PackageData["other-package"],
+			},
+		},
+		release: map[string]string{
+			"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+		`,
+			"slices/mydir/other-package.yaml": `
+			package: other-package
+			slices:
+				myslice:
+					contents:
+		`,
+		},
+		manifestPkgs: map[string]string{
+			"other-package": "other-package v2 a2 h2",
+		},
+	},
+}
+
 var defaultChiselYaml = `
 	format: chisel-v1
 	archives:
@@ -1217,7 +1297,23 @@ func runSlicerTests(c *C, tests []slicerTest) {
 	}
 }
 
-// TODO tests for packages in the DB.
+func (s *S) SlicerPkgTest(c *C) {
+	var translatedTests []slicerTest
+	for _, test := range slicerPkgTests {
+		// Translate the tests.
+		translatedTests = append(translatedTests, slicerTest{
+			summary:      test.summary,
+			arch:         test.arch,
+			release:      test.release,
+			pkgs:         test.pkgs,
+			slices:       test.slices,
+			hackopt:      test.hackopt,
+			manifestPkgs: test.manifestPkgs,
+			error:        test.error,
+		})
+	}
+	runSlicerTests(c, translatedTests)
+}
 
 func treeDumpManifest(entries []manifest.Path) map[string]string {
 	result := make(map[string]string)
