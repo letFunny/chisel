@@ -157,7 +157,9 @@ func ReadManifest(rootDir string, relPath string) (*Manifest, error) {
 
 func Validate(manifest *Manifest) (err error) {
 	defer func() {
-		err = fmt.Errorf("invalid manifest: %s", err)
+		if err != nil {
+			err = fmt.Errorf("invalid manifest: %s", err)
+		}
 	}()
 
 	pkgExist := map[string]bool{}
