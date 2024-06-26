@@ -49,21 +49,21 @@ type Content struct {
 
 // LocateManifestSlices finds the paths marked with "generate:manifest" and
 // returns a map from the manifest path to all the slices that declare it.
-func LocateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
+func LocateManifestSlices(slices []*setup.Slice) (map[string][]*setup.Slice, error) {
 	manifestSlices := make(map[string][]*setup.Slice)
 	for _, s := range slices {
 		for path, info := range s.Contents {
 			if info.Generate == setup.GenerateManifest {
 				dir, err := setup.GetGeneratePath(path)
 				if err != nil {
-					return nil // TODO internal error
+					return nil, fmt.Errorf("internal error: %s", err)
 				}
 				path = filepath.Join(dir, Filename)
 				manifestSlices[path] = append(manifestSlices[path], s)
 			}
 		}
 	}
-	return manifestSlices
+	return manifestSlices, nil
 }
 
 type Manifest struct {
@@ -73,7 +73,6 @@ type Manifest struct {
 	Slices   []Slice
 }
 
-// TODO probably better to take io.Reader
 func Read(rootDir string, relPath string) (mfest *Manifest, err error) {
 	defer func() {
 		if err != nil {

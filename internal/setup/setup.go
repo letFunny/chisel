@@ -628,7 +628,7 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 						pkgName, sliceName, contPath)
 				}
 				if _, err := GetGeneratePath(contPath); err != nil {
-					return nil, fmt.Errorf("slice %s_%s has invalid generate path %s: %s", pkgName, sliceName, contPath, err)
+					return nil, fmt.Errorf("slice %s_%s has %s", pkgName, sliceName, err)
 				}
 				kinds = append(kinds, GeneratePath)
 			} else if strings.ContainsAny(contPath, "*?") {
@@ -709,13 +709,19 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 	return &pkg, err
 }
 
-func GetGeneratePath(path string) (string, error) {
+func GetGeneratePath(path string) (dir string, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("invalid generate path: %s", err)
+		}
+	}()
+
 	if !strings.HasSuffix(path, "/**") {
-		return "", fmt.Errorf("does not end with /**")
+		return "", fmt.Errorf("%s does not end with /**", path)
 	}
 	dirPath := strings.TrimSuffix(path, "**")
 	if strings.ContainsAny(dirPath, "*?") {
-		return "", fmt.Errorf("contains wildcard characters in addition to trailing **")
+		return "", fmt.Errorf("%s contains wildcard characters in addition to trailing **", path)
 	}
 	return dirPath, nil
 }

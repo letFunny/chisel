@@ -454,7 +454,10 @@ type generateManifestsOptions struct {
 // generateManifests generates the Chisel manifest(s) at the specified paths. It
 // returns the paths inside the rootfs where the manifest(s) are generated.
 func generateManifests(options *generateManifestsOptions) error {
-	manifestSlices := manifest.LocateManifestSlices(options.selection)
+	manifestSlices, err := manifest.LocateManifestSlices(options.selection)
+	if err != nil {
+		return err
+	}
 	if len(manifestSlices) == 0 {
 		// Nothing to do.
 		return nil
