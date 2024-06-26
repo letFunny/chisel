@@ -562,10 +562,7 @@ func generateManifests(options *generateManifestsOptions) error {
 	}
 	defer w.Close()
 	_, err = jsonwallw.WriteTo(w)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func unixPerm(mode fs.FileMode) (perm uint32) {
