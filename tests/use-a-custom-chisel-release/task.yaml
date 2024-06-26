@@ -35,8 +35,8 @@ execute: |
   test -d ${rootfs_folder}/chisel
   test -f ${rootfs_folder}/chisel/manifest.wall
   
-  # make sure the manifest can be decompress and each line is valid json
+  # make sure the manifest can be decompressed and each line is valid json
   zstd -d ${rootfs_folder}/chisel/manifest.wall -o ${rootfs_folder}/chisel/manifest.jsonwall
-  while read line; do   
+  while read line; do
     echo $line | jq
   done < ${rootfs_folder}/chisel/manifest.jsonwall

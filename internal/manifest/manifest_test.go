@@ -3,6 +3,7 @@ package manifest_test
 import (
 	"os"
 	"path"
+	"strings"
 
 	"github.com/klauspost/compress/zstd"
 	. "gopkg.in/check.v1"
@@ -18,7 +19,8 @@ var manifestTests = []struct {
 }{
 	{
 		summary: "All types",
-		input: `{"jsonwall":"1.0","schema":"1.0","count":13}
+		input: `
+{"jsonwall":"1.0","schema":"1.0","count":13}
 {"kind":"content","slice":"pkg1_manifest","path":"/manifest/manifest.wall"}
 {"kind":"content","slice":"pkg1_myslice","path":"/dir/file"}
 {"kind":"content","slice":"pkg1_myslice","path":"/dir/foo/bar/"}
@@ -60,25 +62,29 @@ var manifestTests = []struct {
 		},
 	}, {
 		summary: "Slice not found",
-		input: `{"jsonwall":"1.0","schema":"1.0","count":1}
+		input: `
+{"jsonwall":"1.0","schema":"1.0","count":1}
 {"kind":"content","slice":"pkg1_manifest","path":"/manifest/manifest.wall"}
 `,
 		error: `cannot read manifest: invalid manifest: slice pkg1_manifest not found in slices`,
 	}, {
 		summary: "Package not found",
-		input: `{"jsonwall":"1.0","schema":"1.0","count":1}
+		input: `
+{"jsonwall":"1.0","schema":"1.0","count":1}
 {"kind":"slice","name":"pkg1_manifest"}
 `,
 		error: `cannot read manifest: invalid manifest: package "pkg1" not found in packages`,
 	}, {
 		summary: "Path not found",
-		input: `{"jsonwall":"1.0","schema":"1.0","count":1}
+		input: `
+{"jsonwall":"1.0","schema":"1.0","count":1}
 {"kind":"path","path":"/dir/","mode":"01777","slices":["pkg1_myslice"]}
 `,
 		error: `cannot read manifest: invalid manifest: path /dir/ not found in contents`,
 	}, {
 		summary: "Content and path have different slices",
-		input: `{"jsonwall":"1.0","schema":"1.0","count":3}
+		input: `
+{"jsonwall":"1.0","schema":"1.0","count":3}
 {"kind":"content","slice":"pkg1_myotherslice","path":"/dir/"}
 {"kind":"package","name":"pkg1","version":"v1","sha256":"hash1","arch":"arch1"}
 {"kind":"path","path":"/dir/","mode":"01777","slices":["pkg1_myslice"]}
@@ -96,7 +102,7 @@ func (s *S) TestRun(c *C) {
 		c.Assert(err, IsNil)
 		w, err := zstd.NewWriter(f)
 		c.Assert(err, IsNil)
-		_, err = w.Write([]byte(test.input))
+		_, err = w.Write([]byte(strings.TrimSpace(test.input)))
 		c.Assert(err, IsNil)
 		w.Close()
 		f.Close()

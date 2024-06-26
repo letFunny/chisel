@@ -70,7 +70,7 @@ func (cc *contentChecker) checkKnown(path string) error {
 	return err
 }
 
-func Run(options *RunOptions) (*Report, error) {
+func Run(options *RunOptions) error {
 	oldUmask := syscall.Umask(0)
 	defer func() {
 		syscall.Umask(oldUmask)
@@ -80,7 +80,7 @@ func Run(options *RunOptions) (*Report, error) {
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("cannot obtain current directory: %w", err)
+			return fmt.Errorf("cannot obtain current directory: %w", err)
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
@@ -94,10 +94,10 @@ func Run(options *RunOptions) (*Report, error) {
 			archiveName := options.Selection.Release.Packages[slice.Package].Archive
 			archive := options.Archives[archiveName]
 			if archive == nil {
-				return nil, fmt.Errorf("archive %q not defined", archiveName)
+				return fmt.Errorf("archive %q not defined", archiveName)
 			}
 			if !archive.Exists(slice.Package) {
-				return nil, fmt.Errorf("slice package %q missing from archive", slice.Package)
+				return fmt.Errorf("slice package %q missing from archive", slice.Package)
 			}
 			archives[slice.Package] = archive
 			extractPackage = make(map[string][]deb.ExtractInfo)
@@ -156,7 +156,7 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 		reader, err := archives[slice.Package].Fetch(slice.Package)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer reader.Close()
 		packages[slice.Package] = reader
@@ -169,7 +169,7 @@ func Run(options *RunOptions) (*Report, error) {
 
 	report, err := NewReport(targetDir)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: cannot create report: %w", err)
+		return fmt.Errorf("internal error: cannot create report: %w", err)
 	}
 
 	// Creates the filesystem entry and adds it to the report. It also updates
@@ -240,7 +240,7 @@ func Run(options *RunOptions) (*Report, error) {
 		reader.Close()
 		packages[slice.Package] = nil
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -285,7 +285,7 @@ func Run(options *RunOptions) (*Report, error) {
 		targetPath := filepath.Join(targetDir, relPath)
 		entry, err := createFile(targetPath, content.pathInfo)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Do not add paths with "until: mutate".
@@ -293,7 +293,7 @@ func Run(options *RunOptions) (*Report, error) {
 			for _, slice := range content.slices {
 				err = report.Add(slice, entry)
 				if err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -318,13 +318,13 @@ func Run(options *RunOptions) (*Report, error) {
 		}
 		err := scripts.Run(&opts)
 		if err != nil {
-			return nil, fmt.Errorf("slice %s: %w", slice, err)
+			return fmt.Errorf("slice %s: %w", slice, err)
 		}
 	}
 
 	err = removeAfterMutate(targetDir, knownPaths)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Generate manifest.wall.
@@ -334,7 +334,7 @@ func Run(options *RunOptions) (*Report, error) {
 		for pkg, _ := range packages {
 			pkgInfo, err := archives[pkg].Info(pkg)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			pkgInfos = append(pkgInfos, pkgInfo)
 		}
@@ -345,12 +345,11 @@ func Run(options *RunOptions) (*Report, error) {
 			TargetDir:       targetDir,
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	// TODO remove report.
-	return report, nil
+	return nil
 }
 
 // removeAfterMutate removes entries marked with until: mutate. A path is marked
