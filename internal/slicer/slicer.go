@@ -337,10 +337,10 @@ func Run(options *RunOptions) error {
 		pkgInfos = append(pkgInfos, pkgInfo)
 	}
 	err = generateManifests(&generateManifestsOptions{
-		PackageInfo:     pkgInfos,
-		SelectionSlices: options.Selection.Slices,
-		Report:          report,
-		TargetDir:       targetDir,
+		packageInfo: pkgInfos,
+		selection:   options.Selection.Slices,
+		report:      report,
+		targetDir:   targetDir,
 	})
 	if err != nil {
 		return err
@@ -444,18 +444,17 @@ func createFile(targetPath string, pathInfo setup.PathInfo) (*fsutil.Entry, erro
 	})
 }
 
-// TODO dont export them if they end up in this package.
 type generateManifestsOptions struct {
-	PackageInfo     []*archive.PackageInfo
-	SelectionSlices []*setup.Slice
-	Report          *Report
-	TargetDir       string
+	packageInfo []*archive.PackageInfo
+	selection   []*setup.Slice
+	report      *Report
+	targetDir   string
 }
 
 // generateManifests generates the Chisel manifest(s) at the specified paths. It
 // returns the paths inside the rootfs where the manifest(s) are generated.
 func generateManifests(options *generateManifestsOptions) error {
-	manifestSlices := manifest.LocateManifestSlices(options.SelectionSlices)
+	manifestSlices := manifest.LocateManifestSlices(options.selection)
 	if len(manifestSlices) == 0 {
 		// Nothing to do.
 		return nil
@@ -464,8 +463,8 @@ func generateManifests(options *generateManifestsOptions) error {
 		Schema: manifest.Schema,
 	})
 
-	// Add packages to the db.
-	for _, info := range options.PackageInfo {
+	// Add packages to the manifest.
+	for _, info := range options.packageInfo {
 		err := jsonwallw.Add(&manifest.Package{
 			Kind:    "package",
 			Name:    info.Name,
@@ -477,8 +476,8 @@ func generateManifests(options *generateManifestsOptions) error {
 			return err
 		}
 	}
-	// Add slices to the db.
-	for _, s := range options.SelectionSlices {
+	// Add slices to the manifest.
+	for _, s := range options.selection {
 		err := jsonwallw.Add(&manifest.Slice{
 			Kind: "slice",
 			Name: s.String(),
@@ -487,8 +486,8 @@ func generateManifests(options *generateManifestsOptions) error {
 			return err
 		}
 	}
-	// Add paths and contents to the db.
-	for _, entry := range options.Report.Entries {
+	// Add paths and contents to the manifest.
+	for _, entry := range options.report.Entries {
 		sliceNames := []string{}
 		for s := range entry.Slices {
 			err := jsonwallw.Add(&manifest.Content{
@@ -516,7 +515,7 @@ func generateManifests(options *generateManifestsOptions) error {
 			return err
 		}
 	}
-	// Add the manifest path and content entries to the db.
+	// Add the manifest path and content entries to the manifest.
 	for path, slices := range manifestSlices {
 		sliceNames := []string{}
 		for _, s := range slices {
@@ -545,7 +544,7 @@ func generateManifests(options *generateManifestsOptions) error {
 	files := []io.Writer{}
 	for relPath := range manifestSlices {
 		logf("Generating manifest at %s...", relPath)
-		absPath := filepath.Join(options.TargetDir, relPath)
+		absPath := filepath.Join(options.targetDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
 			return err
 		}
