@@ -47,27 +47,18 @@ type Content struct {
 	Path  string `json:"path"`
 }
 
-// GetManifestPath parses the "generate" glob path and returns the path to
-// the manifest within that directory.
-// TODO no me gusta esta función.
-func GetManifestPath(generatePath string) (string, error) {
-	dir, err := setup.GetGeneratePath(generatePath)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, Filename), nil
-}
-
 // LocateManifestSlices finds the paths marked with "generate:manifest" and
-// returns a map from path to all the slices that declare it.
+// returns a map from the manifest path to all the slices that declare it.
 func LocateManifestSlices(slices []*setup.Slice) map[string][]*setup.Slice {
 	manifestSlices := make(map[string][]*setup.Slice)
 	for _, s := range slices {
 		for path, info := range s.Contents {
 			if info.Generate == setup.GenerateManifest {
-				if manifestSlices[path] == nil {
-					manifestSlices[path] = []*setup.Slice{}
+				dir, err := setup.GetGeneratePath(path)
+				if err != nil {
+					return nil // TODO internal error
 				}
+				path = filepath.Join(dir, Filename)
 				manifestSlices[path] = append(manifestSlices[path], s)
 			}
 		}

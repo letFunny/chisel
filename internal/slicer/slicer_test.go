@@ -1201,6 +1201,7 @@ func runSlicerTests(c *C, tests []slicerTest) {
 
 			// Create a manifest slice and add it to the selection.
 			manifestPackage := test.slices[0].Package
+			manifestPath := path.Join("/chisel-data/", manifest.Filename)
 			release.Packages[manifestPackage].Slices["manifest"] = &setup.Slice{
 				Package:   manifestPackage,
 				Name:      "manifest",
@@ -1256,14 +1257,6 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			c.Assert(err, IsNil)
 
 			// Get the manifest from disk and read it.
-			manifestSlices := manifest.LocateManifestSlices(selection.Slices)
-			manifestPath := ""
-			for generatePath := range manifestSlices {
-				manifestPath, err = manifest.GetManifestPath(generatePath)
-				c.Assert(err, IsNil)
-				break
-			}
-			c.Assert(manifestPath, Not(Equals), "")
 			mfest, err := manifest.Read(targetDir, manifestPath)
 			c.Assert(err, IsNil)
 
@@ -1271,17 +1264,17 @@ func runSlicerTests(c *C, tests []slicerTest) {
 			if test.filesystem != nil {
 				filesystem := testutil.TreeDump(targetDir)
 				c.Assert(filesystem["/chisel-data/"], Not(HasLen), 0)
-				c.Assert(filesystem[path.Join("/chisel-data/", manifest.Filename)], Not(HasLen), 0)
+				c.Assert(filesystem[manifestPath], Not(HasLen), 0)
 				delete(filesystem, "/chisel-data/")
-				delete(filesystem, path.Join("/chisel-data/", manifest.Filename))
+				delete(filesystem, manifestPath)
 				c.Assert(filesystem, DeepEquals, test.filesystem)
 			}
 
 			// Assert state of the files recorded in the manifest.
 			if test.manifestPaths != nil {
 				manifestDump := treeDumpManifest(mfest.Paths)
-				c.Assert(manifestDump[path.Join("/chisel-data/", manifest.Filename)], Not(HasLen), 0)
-				delete(manifestDump, path.Join("/chisel-data/", manifest.Filename))
+				c.Assert(manifestDump[manifestPath], Not(HasLen), 0)
+				delete(manifestDump, manifestPath)
 				c.Assert(manifestDump, DeepEquals, test.manifestPaths)
 			}
 
