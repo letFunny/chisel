@@ -1047,88 +1047,85 @@ var slicerPkgTests = []struct {
 	hackopt      func(c *C, opts *slicer.RunOptions)
 	manifestPkgs map[string]string
 	error        string
-}{
-	{
-		summary: "Install two packages",
-		slices: []setup.SliceKey{
-			{"test-package", "myslice"},
-			{"other-package", "myslice"},
+}{{
+	summary: "Install two packages",
+	slices: []setup.SliceKey{
+		{"test-package", "myslice"},
+		{"other-package", "myslice"},
+	},
+	pkgs: map[string]testutil.TestPackage{
+		"test-package": {
+			Name:    "test-package",
+			Hash:    "h1",
+			Version: "v1",
+			Arch:    "a1",
+			Data:    testutil.PackageData["test-package"],
 		},
-		pkgs: map[string]testutil.TestPackage{
-			"test-package": {
-				Name:    "test-package",
-				Hash:    "h1",
-				Version: "v1",
-				Arch:    "a1",
-				Data:    testutil.PackageData["test-package"],
-			},
-			"other-package": {
-				Name:    "other-package",
-				Hash:    "h2",
-				Version: "v2",
-				Arch:    "a2",
-				Data:    testutil.PackageData["other-package"],
-			},
-		},
-		release: map[string]string{
-			"slices/mydir/test-package.yaml": `
-			package: test-package
-			slices:
-				myslice:
-					contents:
-		`,
-			"slices/mydir/other-package.yaml": `
-			package: other-package
-			slices:
-				myslice:
-					contents:
-		`,
-		},
-		manifestPkgs: map[string]string{
-			"test-package":  "test-package v1 a1 h1",
-			"other-package": "other-package v2 a2 h2",
+		"other-package": {
+			Name:    "other-package",
+			Hash:    "h2",
+			Version: "v2",
+			Arch:    "a2",
+			Data:    testutil.PackageData["other-package"],
 		},
 	},
-	{
-		summary: "Two packages, only one is selected",
-		slices: []setup.SliceKey{
-			{"test-package", "myslice"},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+		package: test-package
+		slices:
+			myslice:
+				contents:
+	`,
+		"slices/mydir/other-package.yaml": `
+		package: other-package
+		slices:
+			myslice:
+				contents:
+	`,
+	},
+	manifestPkgs: map[string]string{
+		"test-package":  "test-package v1 a1 h1",
+		"other-package": "other-package v2 a2 h2",
+	},
+}, {
+	summary: "Two packages, only one is selected",
+	slices: []setup.SliceKey{
+		{"test-package", "myslice"},
+	},
+	pkgs: map[string]testutil.TestPackage{
+		"test-package": {
+			Name:    "test-package",
+			Hash:    "h1",
+			Version: "v1",
+			Arch:    "a1",
+			Data:    testutil.PackageData["test-package"],
 		},
-		pkgs: map[string]testutil.TestPackage{
-			"test-package": {
-				Name:    "test-package",
-				Hash:    "h1",
-				Version: "v1",
-				Arch:    "a1",
-				Data:    testutil.PackageData["test-package"],
-			},
-			"other-package": {
-				Name:    "other-package",
-				Hash:    "h2",
-				Version: "v2",
-				Arch:    "a2",
-				Data:    testutil.PackageData["other-package"],
-			},
-		},
-		release: map[string]string{
-			"slices/mydir/test-package.yaml": `
-			package: test-package
-			slices:
-				myslice:
-					contents:
-		`,
-			"slices/mydir/other-package.yaml": `
-			package: other-package
-			slices:
-				myslice:
-					contents:
-		`,
-		},
-		manifestPkgs: map[string]string{
-			"other-package": "other-package v2 a2 h2",
+		"other-package": {
+			Name:    "other-package",
+			Hash:    "h2",
+			Version: "v2",
+			Arch:    "a2",
+			Data:    testutil.PackageData["other-package"],
 		},
 	},
-}
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+		package: test-package
+		slices:
+			myslice:
+				contents:
+	`,
+		"slices/mydir/other-package.yaml": `
+		package: other-package
+		slices:
+			myslice:
+				contents:
+	`,
+	},
+	manifestPkgs: map[string]string{
+		"other-package": "other-package v2 a2 h2",
+	},
+}}
 
 var defaultChiselYaml = `
 	format: chisel-v1
@@ -1252,12 +1249,11 @@ func runSlicerTests(c *C, tests []slicerTest) {
 				test.hackopt(c, &options)
 			}
 			_, err = slicer.Run(&options)
-			if test.error == "" {
-				c.Assert(err, IsNil)
-			} else {
+			if test.error != "" {
 				c.Assert(err, ErrorMatches, test.error)
 				continue
 			}
+			c.Assert(err, IsNil)
 
 			// Get the manifest from disk and read it.
 			manifestSlices := manifest.LocateManifestSlices(selection.Slices)
