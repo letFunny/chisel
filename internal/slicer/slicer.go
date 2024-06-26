@@ -327,26 +327,23 @@ func Run(options *RunOptions) error {
 		return err
 	}
 
-	// Generate manifest.wall.
-	manifestSlices := manifest.LocateManifestSlices(options.Selection.Slices)
-	if len(manifestSlices) > 0 {
-		pkgInfos := []*archive.PackageInfo{}
-		for pkg, _ := range packages {
-			pkgInfo, err := archives[pkg].Info(pkg)
-			if err != nil {
-				return err
-			}
-			pkgInfos = append(pkgInfos, pkgInfo)
-		}
-		err := generateManifests(&generateManifestsOptions{
-			PackageInfo:     pkgInfos,
-			SelectionSlices: options.Selection.Slices,
-			Report:          report,
-			TargetDir:       targetDir,
-		})
+	// Generate manifests.
+	pkgInfos := []*archive.PackageInfo{}
+	for pkg, _ := range packages {
+		pkgInfo, err := archives[pkg].Info(pkg)
 		if err != nil {
 			return err
 		}
+		pkgInfos = append(pkgInfos, pkgInfo)
+	}
+	err = generateManifests(&generateManifestsOptions{
+		PackageInfo:     pkgInfos,
+		SelectionSlices: options.Selection.Slices,
+		Report:          report,
+		TargetDir:       targetDir,
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -458,6 +455,11 @@ type generateManifestsOptions struct {
 // generateManifests generates the Chisel manifest(s) at the specified paths. It
 // returns the paths inside the rootfs where the manifest(s) are generated.
 func generateManifests(options *generateManifestsOptions) error {
+	manifestSlices := manifest.LocateManifestSlices(options.SelectionSlices)
+	if len(manifestSlices) == 0 {
+		// Nothing to do.
+		return nil
+	}
 	jsonwallw := jsonwall.NewDBWriter(&jsonwall.DBWriterOptions{
 		Schema: manifest.Schema,
 	})
@@ -515,8 +517,6 @@ func generateManifests(options *generateManifestsOptions) error {
 		}
 	}
 	// Add the manifest path and content entries to the db.
-	// TODO only call Locate once.
-	manifestSlices := manifest.LocateManifestSlices(options.SelectionSlices)
 	for path, slices := range manifestSlices {
 		sliceNames := []string{}
 		for _, s := range slices {
