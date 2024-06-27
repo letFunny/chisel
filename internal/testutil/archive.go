@@ -29,7 +29,7 @@ func (a *TestArchive) Fetch(pkgName string) (io.ReadCloser, error) {
 	if pkg, ok := a.Pkgs[pkgName]; ok {
 		return io.NopCloser(bytes.NewBuffer(pkg.Data)), nil
 	}
-	return nil, fmt.Errorf("attempted to open %q package", pkgName)
+	return nil, fmt.Errorf("cannot find package %q in archive", pkgName)
 }
 
 func (a *TestArchive) Exists(pkg string) bool {
@@ -40,7 +40,7 @@ func (a *TestArchive) Exists(pkg string) bool {
 func (a *TestArchive) Info(pkgName string) (*archive.PackageInfo, error) {
 	pkg, ok := a.Pkgs[pkgName]
 	if !ok {
-		return nil, fmt.Errorf("cannot find package %q in archive", pkg)
+		return nil, fmt.Errorf("cannot find package %q in archive", pkgName)
 	}
 	return &archive.PackageInfo{
 		Name:    pkg.Name,
