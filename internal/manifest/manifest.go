@@ -145,14 +145,14 @@ func Read(rootDir string, relPath string) (mfest *Manifest, err error) {
 		}
 		manifest.Slices = append(manifest.Slices, slice)
 	}
-	err = Validate(manifest)
+	err = validate(manifest)
 	if err != nil {
 		return nil, err
 	}
 	return manifest, nil
 }
 
-func Validate(manifest *Manifest) (err error) {
+func validate(manifest *Manifest) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("invalid manifest: %s", err)
