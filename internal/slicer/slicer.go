@@ -167,6 +167,8 @@ func Run(options *RunOptions) error {
 	knownPaths := map[string]pathData{}
 	addKnownPath(knownPaths, "/", pathData{})
 
+	// Creates the filesystem entry and adds it to the report. It also updates
+	// knownPaths with the files created.
 	report, err := NewReport(targetDir)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot create report: %w", err)
@@ -342,11 +344,7 @@ func Run(options *RunOptions) error {
 		report:      report,
 		targetDir:   targetDir,
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // removeAfterMutate removes entries marked with until: mutate. A path is marked
