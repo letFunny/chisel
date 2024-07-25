@@ -350,9 +350,9 @@ type yamlArchive struct {
 }
 
 type yamlPackage struct {
-	Name    string               `yaml:"package"`
-	Archive string               `yaml:"archive,omitempty"`
-	Slices  map[string]yamlSlice `yaml:"slices,omitempty"`
+	Name    string                   `yaml:"package"`
+	Archive string                   `yaml:"archive,omitempty"`
+	Slices  map[string]flowYamlSlice `yaml:"slices,omitempty"`
 }
 
 type yamlPath struct {
@@ -419,9 +419,28 @@ func (ym yamlMode) MarshalYAML() (interface{}, error) {
 
 type yamlSlice struct {
 	Essential []string             `yaml:"essential,omitempty"`
-	Contents  map[string]*yamlPath `yaml:"contents,omitempty"`
+	Contents  map[string]*yamlPath `yaml:"contents,omitempty,flow"`
 	Mutate    string               `yaml:"mutate,omitempty"`
 }
+
+type flowYamlSlice struct {
+	yamlSlice `yaml:",inline"`
+}
+
+func (fys flowYamlSlice) MarshalYAML() (interface{}, error) {
+	var node yaml.Node
+	err := node.Encode(fys.yamlSlice)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: instead of hardcoding it is better to iterate, find the node that
+	// has the name "contents" and then change the next one to remove the flow
+	// state.
+	node.Content[3].Style = 0
+	return node, nil
+}
+
+var _ yaml.Marshaler = flowYamlSlice{}
 
 type yamlPubKey struct {
 	ID    string `yaml:"id"`
@@ -765,14 +784,14 @@ func packageToYAML(p *Package) (*yamlPackage, error) {
 	pkg := &yamlPackage{
 		Name:    p.Name,
 		Archive: p.Archive,
-		Slices:  make(map[string]yamlSlice, len(p.Slices)),
+		Slices:  make(map[string]flowYamlSlice, len(p.Slices)),
 	}
 	for name, slice := range p.Slices {
 		yamlSlice, err := sliceToYAML(slice)
 		if err != nil {
 			return nil, err
 		}
-		pkg.Slices[name] = *yamlSlice
+		pkg.Slices[name] = flowYamlSlice{*yamlSlice}
 	}
 	return pkg, nil
 }
