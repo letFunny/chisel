@@ -322,7 +322,7 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 	_, err = archive.Open(&options)
 	c.Assert(err, IsNil)
 
-	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("UbuntuProFIPS"))
+	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("Unknown"))
 
 	options = archive.Options{
 		Label:      "ubuntu",
@@ -335,22 +335,46 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 	}
 
 	_, err = archive.Open(&options)
+	c.Assert(err, ErrorMatches, `corrupted archive InRelease file: no Ubuntu section`)
+}
+
+func (s *httpSuite) TestProArchives(c *C) {
+	setLabel := func(label string) func(*testarchive.Release) {
+		return func(r *testarchive.Release) {
+			r.Label = label
+		}
+	}
+
+	credsDir := c.MkDir()
+	restore := fakeEnv("CHISEL_AUTH_DIR", credsDir)
+	defer restore()
+
+	confFile := filepath.Join(credsDir, "credentials")
+	contents := ""
+	for _, info := range archive.ProArchiveInfo {
+		contents += fmt.Sprintf("machine %s login foo password bar\n", info.BaseURL)
+	}
+	err := os.WriteFile(confFile, []byte(contents), 0600)
 	c.Assert(err, IsNil)
 
-	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("ThirdParty"))
+	for pro, info := range archive.ProArchiveInfo {
+		s.base = info.BaseURL
+		s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel(info.Label))
 
-	options = archive.Options{
-		Label:      "ubuntu",
-		Version:    "22.04",
-		Arch:       "amd64",
-		Suites:     []string{"jammy"},
-		Components: []string{"main", "universe"},
-		CacheDir:   c.MkDir(),
-		PubKeys:    []*packet.PublicKey{s.pubKey},
+		options := archive.Options{
+			Label:      "ubuntu",
+			Version:    "22.04",
+			Arch:       "amd64",
+			Suites:     []string{"jammy"},
+			Components: []string{"main", "universe"},
+			CacheDir:   c.MkDir(),
+			Pro:        pro,
+			PubKeys:    []*packet.PublicKey{s.pubKey},
+		}
+
+		_, err = archive.Open(&options)
+		c.Assert(err, IsNil)
 	}
-
-	_, err = archive.Open(&options)
-	c.Assert(err, ErrorMatches, `.*\bno Ubuntu section`)
 }
 
 type verifyArchiveReleaseTest struct {

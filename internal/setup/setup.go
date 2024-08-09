@@ -27,12 +27,21 @@ type Release struct {
 	DefaultArchive string
 }
 
+const (
+	ProFIPS        = "fips"
+	ProFIPSUpdates = "fips-updates"
+	ProApps        = "apps"
+	ProInfra       = "infra"
+)
+
 // Archive is the location from which binary packages are obtained.
 type Archive struct {
 	Name       string
 	Version    string
 	Suites     []string
 	Components []string
+	Priority   int
+	Pro        string
 	PubKeys    []*packet.PublicKey
 }
 
@@ -189,6 +198,28 @@ func (r *Release) validate() error {
 		paths[newPath] = new
 	}
 
+	// Check for archive priority conflicts.
+	priorities := make(map[int]*Archive)
+	for _, archive := range r.Archives {
+		if old, ok := priorities[archive.Priority]; ok {
+			if old.Name > archive.Name {
+				archive, old = old, archive
+			}
+			return fmt.Errorf("chisel.yaml: archives %q and %q have the same priority value of %v", old.Name, archive.Name, archive.Priority)
+		}
+		priorities[archive.Priority] = archive
+	}
+
+	// Check that archives pinned in packages are defined.
+	for _, pkg := range r.Packages {
+		if pkg.Archive == "" {
+			continue
+		}
+		if _, ok := r.Archives[pkg.Archive]; !ok {
+			return fmt.Errorf("%s: package refers to undefined archive %q", pkg.Path, pkg.Archive)
+		}
+	}
+
 	return nil
 }
 
@@ -315,9 +346,6 @@ func readSlices(release *Release, baseDir, dirName string) error {
 		if err != nil {
 			return err
 		}
-		if pkg.Archive == "" {
-			pkg.Archive = release.DefaultArchive
-		}
 
 		release.Packages[pkg.Name] = pkg
 	}
@@ -332,11 +360,18 @@ type yamlRelease struct {
 	V1PubKeys map[string]yamlPubKey `yaml:"v1-public-keys"`
 }
 
+const (
+	MaxArchivePriority = 1000
+	MinArchivePriority = -1000
+)
+
 type yamlArchive struct {
 	Version    string   `yaml:"version"`
 	Suites     []string `yaml:"suites"`
 	Components []string `yaml:"components"`
 	Default    bool     `yaml:"default"`
+	Priority   int      `yaml:"priority"`
+	Pro        string   `yaml:"pro"`
 	PubKeys    []string `yaml:"public-keys"`
 	// V1PubKeys is used for compatibility with format "chisel-v1".
 	V1PubKeys []string `yaml:"v1-public-keys"`
@@ -477,6 +512,12 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		if details.Default {
 			release.DefaultArchive = archiveName
 		}
+		switch details.Pro {
+		case "", ProApps, ProFIPS, ProFIPSUpdates, ProInfra:
+		default:
+			logf("Ignoring archive %q (invalid pro value: %s)...", archiveName, details.Pro)
+			continue
+		}
 		if len(details.PubKeys) == 0 {
 			if yamlVar.Format == "chisel-v1" {
 				return nil, fmt.Errorf("%s: archive %q missing v1-public-keys field", fileName, archiveName)
@@ -492,13 +533,21 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 			}
 			archiveKeys = append(archiveKeys, key)
 		}
+		if details.Priority > MaxArchivePriority || details.Priority < MinArchivePriority {
+			return nil, fmt.Errorf("%s: archive %q has invalid priority value %d", fileName, archiveName, details.Priority)
+		}
 		release.Archives[archiveName] = &Archive{
 			Name:       archiveName,
 			Version:    details.Version,
 			Suites:     details.Suites,
 			Components: details.Components,
+			Pro:        details.Pro,
+			Priority:   details.Priority,
 			PubKeys:    archiveKeys,
 		}
+	}
+	if len(release.Archives) == 0 {
+		return nil, fmt.Errorf("%s: no valid archives defined", fileName)
 	}
 
 	return release, err
