@@ -201,6 +201,12 @@ func Run(options *RunOptions) (*Report, error) {
 			}
 			inSliceContents = true
 			mutable = mutable || pathInfo.Mutable
+
+			// Forbids mutating hard links.
+			if mutable && entry.Mode.IsRegular() && entry.Link != "" {
+				return fmt.Errorf("cannot mutate hard link: %s", relPath)
+			}
+
 			if pathInfo.Until == setup.UntilNone {
 				until = setup.UntilNone
 			}
