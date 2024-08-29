@@ -1107,9 +1107,42 @@ var slicerTests = []slicerTest{{
 					contents:
 						/dir/file:
 						/hardlink: {mutable: true}
+					mutate: |
+						content.write("/hardlink", "new content")
 		`,
 	},
-	error: `cannot extract from package "test-package": cannot mutate hard link: /hardlink`,
+	error: `slice test-package_myslice: cannot mutate a hard link: /hardlink`,
+}, {
+	summary: "Specifying mutability true for a hard link but not write to it is allowed",
+	slices: []setup.SliceKey{
+		{"test-package", "myslice"}},
+	pkgs: map[string][]byte{
+		"test-package": testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(0755, "./"),
+			testutil.Dir(0755, "./dir/"),
+			testutil.Reg(0644, "./dir/file", "text for file"),
+			testutil.Hln(0644, "./hardlink", "./dir/file"),
+		}),
+	},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/dir/file:
+						/hardlink: {mutable: true}
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":     "dir 0755",
+		"/dir/file": "file 0644 28121945",
+		"/hardlink": "file 0644 28121945",
+	},
+	report: map[string]string{
+		"/dir/file": "file 0644 28121945 {test-package_myslice}",
+		"/hardlink": "hardlink /dir/file {test-package_myslice}",
+	},
 }, {
 	summary: "UntilMutate for hard links are allowed",
 	slices: []setup.SliceKey{
