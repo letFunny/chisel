@@ -247,6 +247,8 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 			}
 			// Create the entry itself.
 			link := tarHeader.Linkname
+			// TODO: The first hard link in the tarball does not have tar.TypeLink flag.
+			// We need to update its fstutil.Entry.Link later.
 			if tarHeader.Typeflag == tar.TypeLink {
 				// A hard link requires the real path of the target file.
 				link = filepath.Join(options.TargetDir, link)
