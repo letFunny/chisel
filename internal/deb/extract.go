@@ -38,6 +38,18 @@ type ExtractInfo struct {
 	Context  any
 }
 
+// The identifier for the hardlink is unique for each unique base file,
+// which counts from 1. The 0 value is reserved for files that are not hard links.
+type hardLinkRevMapEntry struct {
+	Target      []string
+	Identifier  int
+	StagingPath string
+}
+
+type tarMetadata struct {
+	HardLinkRevMap map[string]hardLinkRevMapEntry
+}
+
 func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	for extractPath, extractInfos := range options.Extract {
 		isGlob := strings.ContainsAny(extractPath, "*?")
@@ -62,7 +74,7 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	return options, nil
 }
 
-func Extract(pkgReader io.Reader, options *ExtractOptions) (err error) {
+func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
@@ -83,43 +95,75 @@ func Extract(pkgReader io.Reader, options *ExtractOptions) (err error) {
 		return err
 	}
 
+	return extractData(pkgReader, validOpts)
+}
+
+// getDataReader returns a ReadCloser for the data payload of the package.
+// Calling the Close method must happen outside of this function to prevent
+// premature closing of the underlying package reader.
+// The xz.Reader is wrapper with io.NopCloser since it does not implement the Close method.
+func getDataReader(pkgReader io.ReadSeeker) (io.ReadCloser, error) {
 	arReader := ar.NewReader(pkgReader)
-	var dataReader io.Reader
+	var dataReader io.ReadCloser
 	for dataReader == nil {
 		arHeader, err := arReader.Next()
 		if err == io.EOF {
-			return fmt.Errorf("no data payload")
+			return nil, fmt.Errorf("no data payload")
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		switch arHeader.Name {
 		case "data.tar.gz":
 			gzipReader, err := gzip.NewReader(arReader)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			defer gzipReader.Close()
 			dataReader = gzipReader
 		case "data.tar.xz":
 			xzReader, err := xz.NewReader(arReader)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			dataReader = xzReader
+			dataReader = io.NopCloser(xzReader)
 		case "data.tar.zst":
 			zstdReader, err := zstd.NewReader(arReader)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			defer zstdReader.Close()
-			dataReader = zstdReader
+			dataReader = zstdReader.IOReadCloser()
 		}
 	}
-	return extractData(dataReader, validOpts)
+
+	return dataReader, nil
 }
 
-func extractData(dataReader io.Reader, options *ExtractOptions) error {
+func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
+	// stagingDir is the directory where the hard link base file, which is not
+	// listed in the pendingPaths, to be extracted.
+	stagingDir, err := os.MkdirTemp("", "chisel-staging-")
+	if err != nil {
+		return err
+	}
+	// Fist pass over the tarball to read the header of the tarball
+	// and create its metadata.
+	dataReader, err := getDataReader(pkgReader)
+	if err != nil {
+		return err
+	}
+	tarReader := tar.NewReader(dataReader)
+	tarMetadata, err := readTarMetadata(tarReader)
+	if err != nil {
+		return err
+	}
+	// Rewind back to the start of the tarball and extract the files.
+	pkgReader.Seek(0, io.SeekStart)
+	// Second pass over the tarball to extract the files.
+	dataReader, err = getDataReader(pkgReader)
+	if err != nil {
+		return err
+	}
+	defer dataReader.Close()
 
 	oldUmask := syscall.Umask(0)
 	defer func() {
@@ -143,7 +187,7 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 	// before the entry for the file itself. This is the case for .deb files but
 	// not for all tarballs.
 	tarDirMode := make(map[string]fs.FileMode)
-	tarReader := tar.NewReader(dataReader)
+	tarReader = tar.NewReader(dataReader)
 	for {
 		tarHeader, err := tarReader.Next()
 		if err == io.EOF {
@@ -153,6 +197,9 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 			return err
 		}
 
+		// targetDir is the directory where the file is extracted.
+		// It is either the options.TargetDir or the stagingDir.
+		targetDir := options.TargetDir
 		sourcePath := tarHeader.Name
 		if len(sourcePath) < 3 || sourcePath[0] != '.' || sourcePath[1] != '/' {
 			continue
@@ -187,8 +234,24 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 			}
 		}
 		if len(targetPaths) == 0 {
-			// Nothing to do.
-			continue
+			// Extract the hard link base file to the staging directory, when
+			// 1. it is not part of the target paths (len(targetPaths) == 0)
+			// 2. it is required by other hard links (exists as a key in the HardLinkRevMap)
+			// In case that [len(targetPaths) > 0], the hard link base file is extracted normally.
+			// Note that the hard link base file can also be a symlink.
+			// tarHeader.Name is used here since the paths in the HardLinkRevMap are relative.
+			if entry, ok := tarMetadata.HardLinkRevMap[tarHeader.Name]; ok {
+				targetDir = stagingDir
+				entry.StagingPath = filepath.Join(stagingDir, tarHeader.Name)
+				tarMetadata.HardLinkRevMap[tarHeader.Name] = entry
+				targetPaths[sourcePath] = append(targetPaths[sourcePath], ExtractInfo{
+					Path: sourcePath,
+					Mode: uint(tarHeader.FileInfo().Mode()),
+				})
+			} else {
+				// Nothing to do.
+				continue
+			}
 		}
 
 		var contentCache []byte
@@ -236,7 +299,7 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 				delete(tarDirMode, path)
 
 				createOptions := &fsutil.CreateOptions{
-					Path:        filepath.Join(options.TargetDir, path),
+					Path:        filepath.Join(targetDir, path),
 					Mode:        mode,
 					MakeParents: true,
 				}
@@ -247,17 +310,33 @@ func extractData(dataReader io.Reader, options *ExtractOptions) error {
 			}
 			// Create the entry itself.
 			link := tarHeader.Linkname
+			hardLinkId := 0
 			if tarHeader.Typeflag == tar.TypeLink {
-				// A hard link requires the real path of the target file.
-				link = filepath.Join(options.TargetDir, link)
+				// Set the [link] to the absolute path if it's a hard link
+				if entry, ok := tarMetadata.HardLinkRevMap[link]; ok {
+					if entry.StagingPath != "" {
+						link = entry.StagingPath
+					} else {
+						link = filepath.Join(targetDir, link)
+					}
+					// Set the hardLinkId for hard links
+					hardLinkId = int(entry.Identifier)
+				} else {
+					return fmt.Errorf("hard link target %s not found in the tarball header", tarHeader.Linkname)
+				}
 			}
-
+			// Set the HardLinkId to both the hard link and its counterpart file,
+			// so they are symmetric in the report.
+			if entry, ok := tarMetadata.HardLinkRevMap["."+targetPath]; ok {
+				hardLinkId = int(entry.Identifier)
+			}
 			createOptions := &fsutil.CreateOptions{
-				Path:        filepath.Join(options.TargetDir, targetPath),
+				Path:        filepath.Join(targetDir, targetPath),
 				Mode:        tarHeader.FileInfo().Mode(),
 				Data:        pathReader,
 				Link:        link,
 				MakeParents: true,
+				HardLinkId:  hardLinkId,
 			}
 			err := options.Create(extractInfos, createOptions)
 			if err != nil {
@@ -293,4 +372,48 @@ func parentDirs(path string) []string {
 		}
 	}
 	return parents
+}
+
+func newTarMetadata() tarMetadata {
+	return tarMetadata{
+		HardLinkRevMap: make(map[string]hardLinkRevMapEntry),
+	}
+}
+
+func readTarMetadata(tarReader *tar.Reader) (tarMetadata, error) {
+	metadata := newTarMetadata()
+	var hardLinkRevMap = make(map[string][]string)
+	for {
+		tarHeader, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return metadata, err
+		}
+
+		if tarHeader.Typeflag == tar.TypeLink {
+			sourcePath := tarHeader.Name
+			linkPath := tarHeader.Linkname
+			hardLinkRevMap[linkPath] = append(hardLinkRevMap[linkPath], sourcePath)
+		}
+	}
+
+	// Sort the hard link targets to ensure a deterministic HardLinkId in the report
+	targets := make([]string, 0, len(hardLinkRevMap))
+	for target := range hardLinkRevMap {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+
+	for idx, target := range targets {
+		sources := hardLinkRevMap[target]
+		metadata.HardLinkRevMap[target] = hardLinkRevMapEntry{
+			Target:      sources,
+			Identifier:  idx + 1,
+			StagingPath: "",
+		}
+	}
+
+	return metadata, nil
 }

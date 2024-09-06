@@ -144,7 +144,7 @@ func Run(options *RunOptions) (*Report, error) {
 	}
 
 	// Fetch all packages, using the selection order.
-	packages := make(map[string]io.ReadCloser)
+	packages := make(map[string]io.ReadSeekCloser)
 	for _, slice := range options.Selection.Slices {
 		if packages[slice.Package] != nil {
 			continue
@@ -226,7 +226,10 @@ func Run(options *RunOptions) (*Report, error) {
 		if reader == nil {
 			continue
 		}
-		err := deb.Extract(reader, &deb.ExtractOptions{
+		if err != nil {
+			return nil, err
+		}
+		err = deb.Extract(reader, &deb.ExtractOptions{
 			Package:   slice.Package,
 			Extract:   extract[slice.Package],
 			TargetDir: targetDir,
