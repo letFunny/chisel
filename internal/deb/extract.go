@@ -149,10 +149,6 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 		}
 	}
 
-	// A mapping from the base file path to all the hard links that are pending
-	// We will put the entry only if the base file does not exist
-	// We will do the second pass if this map is not empty
-	// TODO we need both the modes and the extractInfo here
 	pendingHardlinks := make(map[string][]PendingHardlink)
 
 	// When creating a file we will iterate through its parent directories and
@@ -280,7 +276,7 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 			}
 			err := options.Create(extractInfos, createOptions)
 			if err != nil {
-				// Handles the hardlink where its counterpart is not extracted
+				// Handle the hardlink where its counterpart is not extracted
 				if tarHeader.Typeflag == tar.TypeLink && strings.HasPrefix(err.Error(), "link target does not exist") {
 					basePath := sanitizePath(tarHeader.Linkname)
 					pendingHardlinks[basePath] = append(pendingHardlinks[basePath],
@@ -295,7 +291,6 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 			}
 		}
 	}
-	// helperfunction()
 
 	// Second pass to create hard links
 	if len(pendingHardlinks) > 0 {
@@ -350,21 +345,21 @@ func handlePendingHardlinks(options *ExtractOptions, pendingHardlinks map[string
 		if !ok {
 			continue
 		}
-		// algorithm
-		// 1. read the contents of the sourcePath
+
+		// Write the content for the first file in the hard link group
 		createOption := &fsutil.CreateOptions{
 			Path: filepath.Join(options.TargetDir, hardlinks[0].TargetPath),
 			Mode: tarHeader.FileInfo().Mode(),
 			Data: tarReader,
 		}
 
-		// TODO pass extractInfo into Create
 		err = options.Create(hardlinks[0].ExtractInfos, createOption)
 		if err != nil {
 			return err
 		}
 		delete(*pendingPaths, sourcePath)
 
+		// Create the hard links for the rest of the group
 		for _, hardlink := range hardlinks[1:] {
 			createOption := &fsutil.CreateOptions{
 				Path: filepath.Join(options.TargetDir, hardlink.TargetPath),
