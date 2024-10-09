@@ -40,9 +40,12 @@ type httpSuite struct {
 var _ = Suite(&httpSuite{})
 
 var (
-	key1          = testutil.PGPKeys["key1"]
-	key2          = testutil.PGPKeys["key2"]
-	keyUbuntu2018 = testutil.PGPKeys["key-ubuntu-2018"]
+	key1            = testutil.PGPKeys["key1"]
+	key2            = testutil.PGPKeys["key2"]
+	keyUbuntu2018   = testutil.PGPKeys["key-ubuntu-2018"]
+	keyUbuntuFIPSv1 = testutil.PGPKeys["key-ubuntu-fips-v1"]
+	keyUbuntuApps   = testutil.PGPKeys["key-ubuntu-apps"]
+	keyUbuntuESMv2  = testutil.PGPKeys["key-ubuntu-esm-v2"]
 )
 
 func (s *httpSuite) SetUpTest(c *C) {
@@ -358,7 +361,7 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 	_, err = archive.Open(&options)
 	c.Assert(err, IsNil)
 
-	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("UbuntuProFIPS"))
+	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("Unknown"))
 
 	options = archive.Options{
 		Label:      "ubuntu",
@@ -371,11 +374,70 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 	}
 
 	_, err = archive.Open(&options)
+	c.Assert(err, ErrorMatches, `corrupted archive InRelease file: no Ubuntu section`)
+}
+
+func (s *httpSuite) TestProArchives(c *C) {
+	setLabel := func(label string) func(*testarchive.Release) {
+		return func(r *testarchive.Release) {
+			r.Label = label
+		}
+	}
+
+	credsDir := c.MkDir()
+	restore := fakeEnv("CHISEL_AUTH_DIR", credsDir)
+	defer restore()
+
+	confFile := filepath.Join(credsDir, "credentials")
+	contents := ""
+	for _, info := range archive.ProArchiveInfo {
+		contents += fmt.Sprintf("machine %s login foo password bar\n", info.BaseURL)
+	}
+	err := os.WriteFile(confFile, []byte(contents), 0600)
 	c.Assert(err, IsNil)
 
-	s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel("ThirdParty"))
+	do := func(req *http.Request) (*http.Response, error) {
+		auth, ok := req.Header["Authorization"]
+		c.Assert(ok, Equals, true)
+		c.Assert(auth, DeepEquals, []string{"Basic Zm9vOmJhcg=="})
+		return s.Do(req)
+	}
+	restoreDo := archive.FakeDo(do)
+	defer restoreDo()
 
-	options = archive.Options{
+	for pro, info := range archive.ProArchiveInfo {
+		s.base = info.BaseURL
+		s.prepareArchiveAdjustRelease("jammy", "22.04", "amd64", []string{"main", "universe"}, setLabel(info.Label))
+
+		options := archive.Options{
+			Label:      "ubuntu",
+			Version:    "22.04",
+			Arch:       "amd64",
+			Suites:     []string{"jammy"},
+			Components: []string{"main", "universe"},
+			CacheDir:   c.MkDir(),
+			Pro:        pro,
+			PubKeys:    []*packet.PublicKey{s.pubKey},
+		}
+
+		_, err = archive.Open(&options)
+		c.Assert(err, IsNil)
+	}
+}
+
+func (s *httpSuite) TestNonProArchive(c *C) {
+	do := func(req *http.Request) (*http.Response, error) {
+		if _, ok := req.Header["Authorization"]; ok {
+			c.Fatalf("Non-pro archives should not have any authorization header")
+		}
+		return s.Do(req)
+	}
+	restoreDo := archive.FakeDo(do)
+	defer restoreDo()
+
+	s.prepareArchive("jammy", "22.04", "amd64", []string{"main", "universe"})
+
+	options := archive.Options{
 		Label:      "ubuntu",
 		Version:    "22.04",
 		Arch:       "amd64",
@@ -385,8 +447,8 @@ func (s *httpSuite) TestArchiveLabels(c *C) {
 		PubKeys:    []*packet.PublicKey{s.pubKey},
 	}
 
-	_, err = archive.Open(&options)
-	c.Assert(err, ErrorMatches, `.*\bno Ubuntu section`)
+	_, err := archive.Open(&options)
+	c.Assert(err, IsNil)
 }
 
 type verifyArchiveReleaseTest struct {
@@ -491,45 +553,180 @@ func read(r io.Reader) string {
 }
 
 // ----------------------------------------------------------------------------------------
-// Real archive tests, only enabled via --real-archive.
+// Real archive tests, only enabled via:
+// 	1. --real-archive 		for non-Pro archives (e.g. standard jammy archive)
+//	2. --real-pro-archive	for Ubuntu Pro archives (e.g. FIPS archives).
+//
+// To run the tests for Ubuntu Pro archives, the host machine must be Pro
+// enabled and relevant Pro services must be enabled. The following commands
+// might help:
+// 		sudo pro attach <pro-token> --no-auto-enable
+//		sudo pro enable fips-updates esm-apps esm-infra --assume-yes
 
 var realArchiveFlag = flag.Bool("real-archive", false, "Perform tests against real archive")
+var proArchiveFlag = flag.Bool("real-pro-archive", false, "Perform tests against real Ubuntu Pro archive")
 
 func (s *S) TestRealArchive(c *C) {
 	if !*realArchiveFlag {
 		c.Skip("--real-archive not provided")
 	}
-	for _, release := range ubuntuReleases {
-		for _, arch := range elfToDebArch {
-			s.testOpenArchiveArch(c, release, arch)
+	s.runRealArchiveTests(c, realArchiveTests)
+}
+
+func (s *S) TestProArchives(c *C) {
+	if !*proArchiveFlag {
+		c.Skip("--real-pro-archive not provided")
+	}
+	s.runRealArchiveTests(c, proArchiveTests)
+}
+
+func (s *S) runRealArchiveTests(c *C, tests []realArchiveTest) {
+	allArch := make([]string, 0, len(elfToDebArch))
+	for _, arch := range elfToDebArch {
+		allArch = append(allArch, arch)
+	}
+	for _, test := range tests {
+		if len(test.architectures) == 0 {
+			test.architectures = allArch
+		}
+		for _, arch := range test.architectures {
+			s.testOpenArchiveArch(c, test, arch)
 		}
 	}
 }
 
-type ubuntuRelease struct {
+type realArchiveTest struct {
 	name           string
 	version        string
+	suites         []string
+	components     []string
+	pro            string
 	archivePubKeys []*packet.PublicKey
+	architectures  []string
+	pkg            string
+	binPath        string
+	copyrightText  string
 }
 
-var ubuntuReleases = []ubuntuRelease{{
-	name:    "focal",
-	version: "20.04",
-	archivePubKeys: []*packet.PublicKey{
-		keyUbuntu2018.PubKey,
-	},
+var realArchiveTests = []realArchiveTest{{
+	name:           "focal",
+	version:        "20.04",
+	suites:         []string{"focal"},
+	components:     []string{"main", "universe"},
+	archivePubKeys: []*packet.PublicKey{keyUbuntu2018.PubKey},
+	pkg:            "hostname",
+	binPath:        "/bin/hostname",
+	copyrightText:  "This package was written by Peter Tobias <tobias@et-inf.fho-emden.de>",
 }, {
-	name:    "jammy",
-	version: "22.04",
-	archivePubKeys: []*packet.PublicKey{
-		keyUbuntu2018.PubKey,
-	},
+	name:           "jammy",
+	version:        "22.04",
+	suites:         []string{"jammy"},
+	components:     []string{"main", "universe"},
+	archivePubKeys: []*packet.PublicKey{keyUbuntu2018.PubKey},
+	pkg:            "hostname",
+	binPath:        "/bin/hostname",
+	copyrightText:  "This package was written by Peter Tobias <tobias@et-inf.fho-emden.de>",
 }, {
-	name:    "noble",
-	version: "24.04",
-	archivePubKeys: []*packet.PublicKey{
-		keyUbuntu2018.PubKey,
-	},
+	name:           "noble",
+	version:        "24.04",
+	suites:         []string{"noble"},
+	components:     []string{"main", "universe"},
+	archivePubKeys: []*packet.PublicKey{keyUbuntu2018.PubKey},
+	pkg:            "hostname",
+	binPath:        "/usr/bin/hostname",
+	copyrightText:  "This package was written by Peter Tobias <tobias@et-inf.fho-emden.de>",
+}}
+
+var proArchiveTests = []realArchiveTest{{
+	// We cannot test both fips and fips-updates since both services cannot be
+	// enabled at the same time.
+	name:           "focal-fips-updates",
+	version:        "20.04",
+	suites:         []string{"focal-updates"},
+	components:     []string{"main"},
+	pro:            "fips-updates",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuFIPSv1.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "openssh-client",
+	binPath:        "/usr/bin/ssh",
+	copyrightText:  "1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland",
+}, {
+	name:           "focal-esm-apps",
+	version:        "20.04",
+	suites:         []string{"focal-apps-security", "focal-apps-updates"},
+	components:     []string{"main"},
+	pro:            "apps",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuApps.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "hello",
+	binPath:        "/usr/bin/hello",
+	copyrightText:  "This package was first put together by Ian Jackson",
+}, {
+	name:           "focal-esm-infra",
+	version:        "20.04",
+	suites:         []string{"focal-infra-security", "focal-infra-updates"},
+	components:     []string{"main"},
+	pro:            "infra",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuESMv2.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "hello",
+	binPath:        "/usr/bin/hello",
+	copyrightText:  "This package was first put together by Ian Jackson",
+}, {
+	name:           "jammy-fips-updates",
+	version:        "22.04",
+	suites:         []string{"jammy-updates"},
+	components:     []string{"main"},
+	pro:            "fips-updates",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuFIPSv1.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "openssh-client",
+	binPath:        "/usr/bin/ssh",
+	copyrightText:  "1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland",
+}, {
+	name:           "jammy-esm-apps",
+	version:        "22.04",
+	suites:         []string{"jammy-apps-security", "jammy-apps-updates"},
+	components:     []string{"main"},
+	pro:            "apps",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuApps.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "hello",
+	binPath:        "/usr/bin/hello",
+	copyrightText:  "This package was first put together by Ian Jackson",
+}, {
+	name:           "jammy-esm-infra",
+	version:        "22.04",
+	suites:         []string{"jammy-infra-security", "jammy-infra-updates"},
+	components:     []string{"main"},
+	pro:            "infra",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuESMv2.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "hello",
+	binPath:        "/usr/bin/hello",
+	copyrightText:  "This package was first put together by Ian Jackson",
+}, {
+	name:           "noble-esm-apps",
+	version:        "24.04",
+	suites:         []string{"noble-apps-security", "noble-apps-updates"},
+	components:     []string{"main"},
+	pro:            "apps",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuApps.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "hello",
+	binPath:        "/usr/bin/hello",
+	copyrightText:  "This package was first put together by Ian Jackson",
+}, {
+	name:           "noble-esm-infra",
+	version:        "24.04",
+	suites:         []string{"noble-infra-security", "noble-infra-updates"},
+	components:     []string{"main"},
+	pro:            "infra",
+	archivePubKeys: []*packet.PublicKey{keyUbuntuESMv2.PubKey},
+	architectures:  []string{"amd64"},
+	pkg:            "hello",
+	binPath:        "/usr/bin/hello",
+	copyrightText:  "This package was first put together by Ian Jackson",
 }}
 
 var elfToDebArch = map[elf.Machine]string{
@@ -551,17 +748,18 @@ func (s *S) checkArchitecture(c *C, arch string, binaryPath string) {
 	c.Assert(binaryArch, Equals, arch)
 }
 
-func (s *S) testOpenArchiveArch(c *C, release ubuntuRelease, arch string) {
-	c.Logf("Checking ubuntu archive %s %s...", release.name, arch)
+func (s *S) testOpenArchiveArch(c *C, test realArchiveTest, arch string) {
+	c.Logf("Checking ubuntu archive %s %s...", test.name, arch)
 
 	options := archive.Options{
 		Label:      "ubuntu",
-		Version:    release.version,
+		Version:    test.version,
 		Arch:       arch,
-		Suites:     []string{release.name},
-		Components: []string{"main", "universe"},
+		Suites:     test.suites,
+		Components: test.components,
 		CacheDir:   c.MkDir(),
-		PubKeys:    release.archivePubKeys,
+		Pro:        test.pro,
+		PubKeys:    test.archivePubKeys,
 	}
 
 	testArchive, err := archive.Open(&options)
@@ -569,20 +767,20 @@ func (s *S) testOpenArchiveArch(c *C, release ubuntuRelease, arch string) {
 
 	extractDir := c.MkDir()
 
-	pkg, info, err := testArchive.Fetch("hostname")
+	pkg, info, err := testArchive.Fetch(test.pkg)
 	c.Assert(err, IsNil)
-	c.Assert(info.Name, DeepEquals, "hostname")
+	c.Assert(info.Name, DeepEquals, test.pkg)
 	c.Assert(info.Arch, DeepEquals, arch)
 
 	err = deb.Extract(pkg, &deb.ExtractOptions{
-		Package:   "hostname",
+		Package:   test.pkg,
 		TargetDir: extractDir,
 		Extract: map[string][]deb.ExtractInfo{
-			"/usr/share/doc/hostname/copyright": {
+			fmt.Sprintf("/usr/share/doc/%s/copyright", test.pkg): {
 				{Path: "/copyright"},
 			},
-			"/bin/hostname": {
-				{Path: "/hostname"},
+			test.binPath: {
+				{Path: "/binary"},
 			},
 		},
 	})
@@ -590,9 +788,7 @@ func (s *S) testOpenArchiveArch(c *C, release ubuntuRelease, arch string) {
 
 	data, err := os.ReadFile(filepath.Join(extractDir, "copyright"))
 	c.Assert(err, IsNil)
+	c.Assert(strings.Contains(string(data), test.copyrightText), Equals, true)
 
-	copyrightTop := "This package was written by Peter Tobias <tobias@et-inf.fho-emden.de>"
-	c.Assert(strings.Contains(string(data), copyrightTop), Equals, true)
-
-	s.checkArchitecture(c, arch, filepath.Join(extractDir, "hostname"))
+	s.checkArchitecture(c, arch, filepath.Join(extractDir, "binary"))
 }

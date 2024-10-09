@@ -86,6 +86,9 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
+	if len(options.Archives) == 0 {
+		return fmt.Errorf("no valid archives defined")
+	}
 	archives, err := selectPkgArchives(options.Archives, options.Selection)
 	if err != nil {
 		return err
