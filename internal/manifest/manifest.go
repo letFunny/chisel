@@ -39,6 +39,7 @@ type Path struct {
 	FinalSHA256 string   `json:"final_sha256,omitempty"`
 	Size        uint64   `json:"size,omitempty"`
 	Link        string   `json:"link,omitempty"`
+	HardLinkId  uint64   `json:"hard_link_id,omitempty"`
 }
 
 type Content struct {
@@ -291,6 +292,7 @@ func manifestAddReport(dbw *jsonwall.DBWriter, report *Report) error {
 			FinalSHA256: entry.FinalSHA256,
 			Size:        uint64(entry.Size),
 			Link:        entry.Link,
+			HardLinkId:  entry.HardLinkId,
 		})
 		if err != nil {
 			return err
@@ -332,6 +334,7 @@ func fastValidate(options *WriteOptions) (err error) {
 		}
 		sliceExist[slice.String()] = true
 	}
+	hardLinkGroups := make(map[uint64][]*ReportEntry)
 	for _, entry := range options.Report.Entries {
 		err := validateReportEntry(&entry)
 		if err != nil {
@@ -342,7 +345,39 @@ func fastValidate(options *WriteOptions) (err error) {
 				return fmt.Errorf("path %q refers to missing slice %s", entry.Path, slice.String())
 			}
 		}
+		if entry.HardLinkId != 0 {
+			e := entry
+			hardLinkGroups[e.HardLinkId] = append(hardLinkGroups[e.HardLinkId], &e)
+		}
 	}
+	// Entries within a hard link group must have same content.
+	var linkIDs []uint64
+	for id := range hardLinkGroups {
+		linkIDs = append(linkIDs, id)
+	}
+	sort.Slice(linkIDs, func(i, j int) bool {
+		return linkIDs[i] < linkIDs[j]
+	})
+	for i, id := range linkIDs {
+		if uint64(i+1) != id {
+			return fmt.Errorf("skipped hard link ID %d, but %d exists", i+1, id)
+		}
+		entries := hardLinkGroups[id]
+		if len(entries) == 1 {
+			return fmt.Errorf("hard link group %d has only one path: %s", id, entries[0].Path)
+		}
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Path < entries[j].Path
+		})
+		e0 := entries[0]
+		for _, e := range entries[1:] {
+			if e.Link != e0.Link || e.Mode != e0.Mode || e.SHA256 != e0.SHA256 ||
+				e.Size != e0.Size || e.FinalSHA256 != e0.FinalSHA256 {
+				return fmt.Errorf("hard linked paths %q and %q have diverging contents", e0.Path, e.Path)
+			}
+		}
+	}
+
 	return nil
 }
 

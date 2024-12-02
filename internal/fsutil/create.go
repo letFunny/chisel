@@ -15,6 +15,8 @@ type CreateOptions struct {
 	Path string
 	Mode fs.FileMode
 	Data io.Reader
+	// If Link is not empty and the symlink flag is set in Mode, a symlink is
+	// created. If the symlink flag is not set in Mode, a hard link is created.
 	Link string
 	// If MakeParents is true, missing parent directories of Path are
 	// created with permissions 0755.
@@ -24,16 +26,26 @@ type CreateOptions struct {
 	OverrideMode bool
 }
 
+// The following constants are used to distinguish different link types,
+// such as hard links and symlinks.
+const (
+	TypeSymlink = 1 << iota
+	TypeHardLink
+)
+
 type Entry struct {
-	Path   string
-	Mode   fs.FileMode
-	SHA256 string
-	Size   int
-	Link   string
+	Path     string
+	Mode     fs.FileMode
+	SHA256   string
+	Size     int
+	Link     string
+	LinkType int
 }
 
 // Create creates a filesystem entry according to the provided options and returns
 // the information about the created entry.
+//
+// Create returns errors from the os package.
 func Create(options *CreateOptions) (*Entry, error) {
 	rp := &readerProxy{inner: options.Data, h: sha256.New()}
 	// Use the proxy instead of the raw Reader.
@@ -43,6 +55,7 @@ func Create(options *CreateOptions) (*Entry, error) {
 
 	var err error
 	var hash string
+	var linkType int
 	if o.MakeParents {
 		if err := os.MkdirAll(filepath.Dir(o.Path), 0755); err != nil {
 			return nil, err
@@ -51,12 +64,20 @@ func Create(options *CreateOptions) (*Entry, error) {
 
 	switch o.Mode & fs.ModeType {
 	case 0:
-		err = createFile(o)
-		hash = hex.EncodeToString(rp.h.Sum(nil))
+		if o.Link != "" {
+			// Creating the hard link does not involve reading the file.
+			// Therefore, its size and hash is not calculated here.
+			err = createHardLink(o)
+			linkType = TypeHardLink
+		} else {
+			err = createFile(o)
+			hash = hex.EncodeToString(rp.h.Sum(nil))
+		}
 	case fs.ModeDir:
 		err = createDir(o)
 	case fs.ModeSymlink:
 		err = createSymlink(o)
+		linkType = TypeSymlink
 	default:
 		err = fmt.Errorf("unsupported file type: %s", o.Path)
 	}
@@ -69,7 +90,8 @@ func Create(options *CreateOptions) (*Entry, error) {
 		return nil, err
 	}
 	mode := s.Mode()
-	if o.OverrideMode && mode != o.Mode && o.Mode&fs.ModeSymlink == 0 {
+	// Overrides mode if the entry is not a link and the mode differs.
+	if o.OverrideMode && mode != o.Mode && o.Link == "" {
 		err := os.Chmod(o.Path, o.Mode)
 		if err != nil {
 			return nil, err
@@ -78,11 +100,12 @@ func Create(options *CreateOptions) (*Entry, error) {
 	}
 
 	entry := &Entry{
-		Path:   o.Path,
-		Mode:   mode,
-		SHA256: hash,
-		Size:   rp.size,
-		Link:   o.Link,
+		Path:     o.Path,
+		Mode:     mode,
+		SHA256:   hash,
+		Size:     rp.size,
+		Link:     o.Link,
+		LinkType: linkType,
 	}
 	return entry, nil
 }
@@ -160,6 +183,25 @@ func createSymlink(o *CreateOptions) error {
 		return err
 	}
 	return os.Symlink(o.Link, o.Path)
+}
+
+func createHardLink(o *CreateOptions) error {
+	debugf("Creating hard link: %s => %s", o.Path, o.Link)
+	err := os.Link(o.Link, o.Path)
+	if err != nil && os.IsExist(err) {
+		linkInfo, serr := os.Lstat(o.Link)
+		if serr != nil {
+			return serr
+		}
+		pathInfo, serr := os.Lstat(o.Path)
+		if serr != nil {
+			return serr
+		}
+		if os.SameFile(linkInfo, pathInfo) {
+			return nil
+		}
+	}
+	return err
 }
 
 // readerProxy implements the io.Reader interface proxying the calls to its
