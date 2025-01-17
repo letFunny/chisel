@@ -64,6 +64,7 @@ type yamlPath struct {
 	Until    PathUntil    `yaml:"until,omitempty"`
 	Arch     yamlArch     `yaml:"arch,omitempty"`
 	Generate GenerateKind `yaml:"generate,omitempty"`
+	Prefer   string       `yaml:"prefer,omitempty"`
 }
 
 func (yp *yamlPath) MarshalYAML() (interface{}, error) {
@@ -90,7 +91,8 @@ func (yp *yamlPath) SameContent(other *yamlPath) bool {
 		yp.Text == other.Text &&
 		yp.Symlink == other.Symlink &&
 		yp.Mutable == other.Mutable &&
-		yp.Generate == other.Generate)
+		yp.Generate == other.Generate &&
+		yp.Prefer == other.Prefer)
 }
 
 type yamlArch struct {
@@ -362,6 +364,7 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 			var until PathUntil
 			var arch []string
 			var generate GenerateKind
+			var prefer string
 			if yamlPath != nil && yamlPath.Generate != "" {
 				zeroPathGenerate := zeroPath
 				zeroPathGenerate.Generate = yamlPath.Generate
@@ -386,6 +389,7 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 				mode = uint(yamlPath.Mode)
 				mutable = yamlPath.Mutable
 				generate = yamlPath.Generate
+				prefer = yamlPath.Prefer
 				if yamlPath.Dir {
 					if !strings.HasSuffix(contPath, "/") {
 						return nil, fmt.Errorf("slice %s_%s path %s must end in / for 'make' to be valid",
@@ -420,6 +424,9 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 						return nil, fmt.Errorf("slice %s_%s has invalid 'arch' for path %s: %q", pkgName, sliceName, contPath, s)
 					}
 				}
+				if prefer == pkgName {
+					return nil, fmt.Errorf("slice %s_%s has invalid 'prefer' for path %s: %q", pkgName, sliceName, contPath, prefer)
+				}
 			}
 			if len(kinds) == 0 {
 				kinds = append(kinds, CopyPath)
@@ -442,6 +449,7 @@ func parsePackage(baseDir, pkgName, pkgPath string, data []byte) (*Package, erro
 				Until:    until,
 				Arch:     arch,
 				Generate: generate,
+				Prefer:   prefer,
 			}
 		}
 

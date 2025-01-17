@@ -2020,6 +2020,265 @@ var setupTests = []setupTest{{
 		`,
 	},
 	relerror: `chisel.yaml: archive "ubuntu" defined twice`,
+}, {
+	summary: "Path conflicts with 'prefer'",
+	input: map[string]string{
+		"slices/mydir/mypkg1.yaml": `
+			package: mypkg1
+			slices:
+				myslice1:
+					contents:
+						/path: {prefer: mypkg2}
+						/text: {text: foo}
+						/link: {symlink: /file1}
+				myslice2:
+					contents:
+						/path: {prefer: mypkg2}
+						/text: {text: foo}
+		`,
+		"slices/mydir/mypkg2.yaml": `
+			package: mypkg2
+			slices:
+				myslice1:
+					contents:
+						/path: {prefer: mypkg3}
+						/link: {symlink: /file2, prefer: mypkg1}
+		`,
+		"slices/mydir/mypkg3.yaml": `
+			package: mypkg3
+			slices:
+				myslice1:
+					contents:
+						/path:
+						/text: {text: foo}
+		`,
+	},
+	release: &setup.Release{
+		Archives: map[string]*setup.Archive{
+			"ubuntu": {
+				Name:       "ubuntu",
+				Version:    "22.04",
+				Suites:     []string{"jammy"},
+				Components: []string{"main", "universe"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+			},
+		},
+		Packages: map[string]*setup.Package{
+			"mypkg1": {
+				Name: "mypkg1",
+				Path: "slices/mydir/mypkg1.yaml",
+				Slices: map[string]*setup.Slice{
+					"myslice1": {
+						Package: "mypkg1",
+						Name:    "myslice1",
+						Contents: map[string]setup.PathInfo{
+							"/path": {Kind: "copy", Prefer: "mypkg2"},
+							"/text": {Kind: "text", Info: "foo"},
+							"/link": {Kind: "symlink", Info: "/file1"},
+						},
+					},
+					"myslice2": {
+						Package: "mypkg1",
+						Name:    "myslice2",
+						Contents: map[string]setup.PathInfo{
+							"/path": {Kind: "copy", Prefer: "mypkg2"},
+							"/text": {Kind: "text", Info: "foo"},
+						},
+					},
+				},
+			},
+			"mypkg2": {
+				Name: "mypkg2",
+				Path: "slices/mydir/mypkg2.yaml",
+				Slices: map[string]*setup.Slice{
+					"myslice1": {
+						Package: "mypkg2",
+						Name:    "myslice1",
+						Contents: map[string]setup.PathInfo{
+							"/path": {Kind: "copy", Prefer: "mypkg3"},
+							"/link": {Kind: "symlink", Info: "/file2", Prefer: "mypkg1"},
+						},
+					},
+				},
+			},
+			"mypkg3": {
+				Name: "mypkg3",
+				Path: "slices/mydir/mypkg3.yaml",
+				Slices: map[string]*setup.Slice{
+					"myslice1": {
+						Package: "mypkg3",
+						Name:    "myslice1",
+						Contents: map[string]setup.PathInfo{
+							"/path": {Kind: "copy"},
+							"/text": {Kind: "text", Info: "foo"},
+						},
+					},
+				},
+			},
+		},
+		ConflictRanks: map[string]map[string]int{
+			"/path": {
+				"mypkg1": 1,
+				"mypkg2": 2,
+				"mypkg3": 3,
+			},
+			"/link": {
+				"mypkg1": 2,
+				"mypkg2": 1,
+			},
+		},
+	},
+}, {
+	summary: "Cannot specify same package in 'prefer'",
+	input: map[string]string{
+		"slices/mydir/mypkg.yaml": `
+			package: mypkg
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg}
+		`,
+	},
+	relerror: `slice mypkg_myslice has invalid 'prefer' for path /path: "mypkg"`,
+}, {
+	summary: "Cannot specify non-existent package in 'prefer'",
+	input: map[string]string{
+		"slices/mydir/mypkg.yaml": `
+			package: mypkg
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: non-existent}
+		`,
+	},
+	relerror: `slice mypkg_myslice has invalid 'prefer' for path /path: "non-existent"`,
+}, {
+	summary: "Path prefers package, but package does not have path",
+	input: map[string]string{
+		"slices/mydir/mypkg1.yaml": `
+			package: mypkg1
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg2}
+		`,
+		"slices/mydir/mypkg2.yaml": `
+			package: mypkg2
+		`,
+	},
+	relerror: `slice mypkg1_myslice path /path prefers "mypkg2": package mypkg2 does not have path /path`,
+}, {
+	summary: "Path has 'prefer' cycle",
+	input: map[string]string{
+		"slices/mydir/mypkg1.yaml": `
+			package: mypkg1
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg2}
+		`,
+		"slices/mydir/mypkg2.yaml": `
+			package: mypkg2
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg3}
+		`,
+		"slices/mydir/mypkg3.yaml": `
+			package: mypkg3
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg1}
+		`,
+		"slices/mydir/mypkg4.yaml": `
+			package: mypkg4
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg1}
+		`,
+	},
+	relerror: `slice mypkg1_myslice path /path has a 'prefer' cycle: mypkg1, mypkg2, mypkg3`,
+}, {
+	summary: "Path has a disconnected 'prefer' graph",
+	input: map[string]string{
+		"slices/mydir/mypkg1.yaml": `
+			package: mypkg1
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg2}
+		`,
+		"slices/mydir/mypkg2.yaml": `
+			package: mypkg2
+			slices:
+				myslice:
+					contents:
+						/path:
+		`,
+		"slices/mydir/mypkg3.yaml": `
+			package: mypkg3
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg4}
+		`,
+		"slices/mydir/mypkg4.yaml": `
+			package: mypkg4
+			slices:
+				myslice:
+					contents:
+						/path:
+		`,
+	},
+	relerror: `slices mypkg1_myslice and mypkg3_myslice have no 'prefer' relationship for path /path`,
+}, {
+	summary: "Path has more than one 'prefer' chain",
+	input: map[string]string{
+		"slices/mydir/mypkg1.yaml": `
+			package: mypkg1
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg3}
+		`,
+		"slices/mydir/mypkg2.yaml": `
+			package: mypkg2
+			slices:
+				myslice:
+					contents:
+						/path: {prefer: mypkg3}
+		`,
+		"slices/mydir/mypkg3.yaml": `
+			package: mypkg3
+			slices:
+				myslice:
+					contents:
+						/path:
+		`,
+	},
+	relerror: `slices mypkg1_myslice and mypkg2_myslice have a non-linear 'prefer' relationship for path /path`,
+}, {
+	summary: "Glob paths can conflict with 'prefer' chain",
+	input: map[string]string{
+		"slices/mydir/mypkg1.yaml": `
+			package: mypkg1
+			slices:
+				myslice:
+					contents:
+						/**:
+						/path: {prefer: mypkg2}
+		`,
+		"slices/mydir/mypkg2.yaml": `
+			package: mypkg2
+			slices:
+				myslice:
+					contents:
+						/path:
+		`,
+	},
+	relerror: `slices mypkg1_myslice and mypkg2_myslice conflict on /\*\* and /path`,
 }}
 
 var defaultChiselYaml = `
