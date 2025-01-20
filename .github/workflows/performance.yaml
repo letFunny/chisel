@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: https://github.com/canonical/chisel-releases
+          repository: canonical/chisel-releases
           ref: ubuntu-24.04
           path: chisel-releases
 
