@@ -33,4 +33,4 @@ jobs:
 
       - name: Run benchmark
         run: |
-          bash .github/scripts/info-benchmark.sh
+          bash .github/scripts/info-benchmark.sh ${{ github.event.pull_request.head.sha }} ${{ github.event.pull_request.head.sha }}
