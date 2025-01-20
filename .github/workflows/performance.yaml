@@ -1,0 +1,36 @@
+name: Performance
+
+on:
+  workflow_dispatch:
+  push:
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [main]
+
+jobs:
+  benchmark-info:
+    runs-on: ubuntu-22.04
+    name: Benchmark chisel info (24.04)
+    env:
+      TEST_COVERAGE_FILE: test-coverage.out
+      TEST_COVERAGE_HTML_FILE: test-coverage.html
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: 'go.mod'
+
+      - uses: actions/checkout@v4
+        with:
+          repository: https://github.com/canonical/chisel-releases
+          ref: ubuntu-24.04
+          path: chisel-releases
+
+      - name: Install hyperfine
+        run: sudo apt-get install -y hyperfine
+
+      - name: Run benchmark
+        run: |
+          bash .github/scripts/info-benchmark.sh
