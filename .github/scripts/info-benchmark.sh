@@ -7,16 +7,16 @@ if [ "$#" -ne 2 ]; then
 fi
 
 BASE_NAME="BASE"
-NEW_NAME="HEAD"
-BASE_REV=$(git rev-parse $BASE_NAME)
-NEW_REV=$(git rev-parse $NEW_NAME)
+HEAD_NAME="HEAD"
+BASE_REV=$(git rev-parse $1)
+HEAD_REV=$(git rev-parse $2)
 
 create_exec () {
 	REV=$1
 	git checkout $REV
 	go build -o $REV ./cmd/chisel
 }
-create_exec $NEW_REV
+create_exec $HEAD_REV
 create_exec $BASE_REV
 
-hyperfine "./$BASE_REV info --release ../chisel-releases 'python3.12_core'" -n "$BASE_NAME" "./$NEW_REV info --release ../chisel-releases 'python3.12_core'" -n "$NEW_NAME"
+hyperfine "./$BASE_REV info --release ../chisel-releases 'python3.12_core'" -n "$BASE_NAME" "./$HEAD_REV info --release ../chisel-releases 'python3.12_core'" -n "$HEAD_NAME"
