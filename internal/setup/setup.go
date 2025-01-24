@@ -120,6 +120,9 @@ type Selection struct {
 	Slices  []*Slice
 }
 
+var allDeclaredPaths = map[string]bool{}
+var conflictCounter = 0
+
 func ReadRelease(dir string) (*Release, error) {
 	logDir := dir
 	if strings.Contains(dir, "/.cache/") {
@@ -137,10 +140,32 @@ func ReadRelease(dir string) (*Release, error) {
 		return nil, err
 	}
 
+	for _, p := range release.Packages {
+		for _, s := range p.Slices {
+			newPaths := map[string]PathInfo{}
+			for path, pathInfo := range s.Contents {
+				allDeclaredPaths[path] = true
+				path = filepath.Dir(path)
+				for path != "/" {
+					newPaths[path] = pathInfo
+					path = filepath.Dir(path)
+				}
+			}
+			for path, pathInfo := range newPaths {
+				s.Contents[path] = pathInfo
+			}
+		}
+	}
+
 	err = release.validate()
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println(conflictCounter)
+	fmt.Println(len(allDeclaredPaths))
+	fmt.Println(float64(conflictCounter) / float64(len(allDeclaredPaths)))
+
 	return release, nil
 }
 
@@ -170,7 +195,11 @@ func (r *Release) validate() error {
 						if old.Package > new.Package || old.Package == new.Package && old.Name > new.Name {
 							old, new = new, old
 						}
-						return fmt.Errorf("slices %s and %s conflict on %s", old, new, newPath)
+						if allDeclaredPaths[filepath.Clean(newPath)] {
+							continue
+						}
+						// return fmt.Errorf("slices %s and %s conflict on %s", old, new, newPath)
+						conflictCounter += 1
 					}
 					// Note: Because for conflict resolution we only check that
 					// the created file would be the same and we know newInfo and
@@ -207,7 +236,11 @@ func (r *Release) validate() error {
 					old, new = new, old
 					oldPath, newPath = newPath, oldPath
 				}
-				return fmt.Errorf("slices %s and %s conflict on %s and %s", old, new, oldPath, newPath)
+				if allDeclaredPaths[filepath.Clean(newPath)] || allDeclaredPaths[filepath.Clean(oldPath)] {
+					continue
+				}
+				// return fmt.Errorf("slices %s and %s conflict on %s and %s", old, new, oldPath, newPath)
+				conflictCounter += 1
 			}
 		}
 	}
