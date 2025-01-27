@@ -120,7 +120,8 @@ type Selection struct {
 	Slices  []*Slice
 }
 
-var allDeclaredPaths = map[string]bool{}
+var provenance = map[*Slice]map[string]string{}
+var allDeclaredPaths = map[string]uint{}
 var conflictCounter = 0
 
 func ReadRelease(dir string) (*Release, error) {
@@ -144,11 +145,16 @@ func ReadRelease(dir string) (*Release, error) {
 		for _, s := range p.Slices {
 			newPaths := map[string]PathInfo{}
 			for path, pathInfo := range s.Contents {
-				allDeclaredPaths[path] = true
-				path = filepath.Dir(path)
-				for path != "/" {
-					newPaths[path] = pathInfo
-					path = filepath.Dir(path)
+				allDeclaredPaths[path] = 0
+				if provenance[s] == nil {
+					provenance[s] = make(map[string]string)
+				}
+				provenance[s][path] = path
+				p := filepath.Dir(path)
+				for p != "/" {
+					newPaths[p] = pathInfo
+					p = filepath.Dir(p)
+					provenance[s][p] = path
 				}
 			}
 			for path, pathInfo := range newPaths {
@@ -165,6 +171,14 @@ func ReadRelease(dir string) (*Release, error) {
 	fmt.Println(conflictCounter)
 	fmt.Println(len(allDeclaredPaths))
 	fmt.Println(float64(conflictCounter) / float64(len(allDeclaredPaths)))
+	pathsWithConflict := 0
+	for _, conflicts := range allDeclaredPaths {
+		if conflicts > 0 {
+			pathsWithConflict += 1
+		}
+	}
+	fmt.Println("Percentage of sdfs paths that conflict when unfolded", float64(pathsWithConflict)/float64(len(allDeclaredPaths)))
+	// TODO might be roughly half becaues it takes two to conflict.
 
 	return release, nil
 }
@@ -195,10 +209,14 @@ func (r *Release) validate() error {
 						if old.Package > new.Package || old.Package == new.Package && old.Name > new.Name {
 							old, new = new, old
 						}
-						if allDeclaredPaths[filepath.Clean(newPath)] {
-							continue
-						}
+						// if allDeclaredPaths[filepath.Clean(newPath)] {
+						// 	continue
+						// }
 						// return fmt.Errorf("slices %s and %s conflict on %s", old, new, newPath)
+						p := provenance[new][newPath]
+						allDeclaredPaths[p] += 1
+						p = provenance[old][newPath]
+						allDeclaredPaths[p] += 1
 						conflictCounter += 1
 					}
 					// Note: Because for conflict resolution we only check that
@@ -236,10 +254,10 @@ func (r *Release) validate() error {
 					old, new = new, old
 					oldPath, newPath = newPath, oldPath
 				}
-				if allDeclaredPaths[filepath.Clean(newPath)] || allDeclaredPaths[filepath.Clean(oldPath)] {
-					continue
-				}
-				// return fmt.Errorf("slices %s and %s conflict on %s and %s", old, new, oldPath, newPath)
+				p := provenance[new][newPath]
+				allDeclaredPaths[p] += 1
+				p = provenance[old][oldPath]
+				allDeclaredPaths[p] += 1
 				conflictCounter += 1
 			}
 		}
