@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -145,6 +146,7 @@ func ReadRelease(dir string) (*Release, error) {
 		for _, s := range p.Slices {
 			newPaths := map[string]PathInfo{}
 			for path, pathInfo := range s.Contents {
+				path := path
 				allDeclaredPaths[path] = 0
 				if provenance[s] == nil {
 					provenance[s] = make(map[string]string)
@@ -153,8 +155,8 @@ func ReadRelease(dir string) (*Release, error) {
 				p := filepath.Dir(path)
 				for p != "/" {
 					newPaths[p] = pathInfo
-					p = filepath.Dir(p)
 					provenance[s][p] = path
+					p = filepath.Dir(p)
 				}
 			}
 			for path, pathInfo := range newPaths {
@@ -168,6 +170,8 @@ func ReadRelease(dir string) (*Release, error) {
 		return nil, err
 	}
 
+	bs, _ := json.Marshal(allDeclaredPaths)
+	fmt.Println(string(bs))
 	fmt.Println(conflictCounter)
 	fmt.Println(len(allDeclaredPaths))
 	fmt.Println(float64(conflictCounter) / float64(len(allDeclaredPaths)))
@@ -206,16 +210,29 @@ func (r *Release) validate() error {
 				if old, ok := paths[newPath]; ok {
 					oldInfo := old.Contents[newPath]
 					if !newInfo.SameContent(&oldInfo) || (newInfo.Kind == CopyPath || newInfo.Kind == GlobPath) && new.Package != old.Package {
-						if old.Package > new.Package || old.Package == new.Package && old.Name > new.Name {
-							old, new = new, old
-						}
 						// if allDeclaredPaths[filepath.Clean(newPath)] {
 						// 	continue
 						// }
 						// return fmt.Errorf("slices %s and %s conflict on %s", old, new, newPath)
-						p := provenance[new][newPath]
+						p, ok := provenance[new][newPath]
+						if !ok {
+							panic("")
+						}
+						_, ok = allDeclaredPaths[p]
+						if !ok {
+							// Check that the provenance is correct.
+							panic("")
+						}
 						allDeclaredPaths[p] += 1
-						p = provenance[old][newPath]
+						p, ok = provenance[old][newPath]
+						if !ok {
+							panic("")
+						}
+						_, ok = allDeclaredPaths[p]
+						if !ok {
+							// Check that the provenance is correct.
+							panic("")
+						}
 						allDeclaredPaths[p] += 1
 						conflictCounter += 1
 					}
@@ -254,9 +271,25 @@ func (r *Release) validate() error {
 					old, new = new, old
 					oldPath, newPath = newPath, oldPath
 				}
-				p := provenance[new][newPath]
+				p, ok := provenance[new][newPath]
+				if !ok {
+					panic("")
+				}
+				_, ok = allDeclaredPaths[p]
+				if !ok {
+					// Check that the provenance is correct.
+					panic("")
+				}
 				allDeclaredPaths[p] += 1
-				p = provenance[old][oldPath]
+				p, ok = provenance[old][oldPath]
+				if !ok {
+					panic("")
+				}
+				_, ok = allDeclaredPaths[p]
+				if !ok {
+					// Check that the provenance is correct.
+					panic("")
+				}
 				allDeclaredPaths[p] += 1
 				conflictCounter += 1
 			}
