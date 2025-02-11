@@ -151,9 +151,10 @@ type yamlPubKey struct {
 
 func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 	release := &Release{
-		Path:     baseDir,
-		Packages: make(map[string]*Package),
-		Archives: make(map[string]*Archive),
+		Path:         baseDir,
+		Packages:     make(map[string]*Package),
+		Archives:     make(map[string]*Archive),
+		pathOrdering: make(map[string][]string),
 	}
 
 	fileName := stripBase(baseDir, filePath)
@@ -484,6 +485,7 @@ func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
 		Until:    pi.Until,
 		Arch:     yamlArch{List: pi.Arch},
 		Generate: pi.Generate,
+		Prefer:   pi.Prefer,
 	}
 	switch pi.Kind {
 	case DirPath:
