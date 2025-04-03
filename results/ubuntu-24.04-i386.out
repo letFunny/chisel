@@ -1,0 +1,9 @@
+/lib:
+    (mode: 0755, link: "", pkgs: [apparmor,liblzo2-2,libcryptsetup12...(and 1 more)])
+    (mode: 0777, link: "usr/lib", pkgs: [base-files])
+/bin:
+    (mode: 0755, link: "", pkgs: [netcat-openbsd])
+    (mode: 0777, link: "usr/bin", pkgs: [base-files])
+/sbin:
+    (mode: 0755, link: "", pkgs: [apparmor])
+    (mode: 0777, link: "usr/sbin", pkgs: [base-files])

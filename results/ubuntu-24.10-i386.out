@@ -1,0 +1,6 @@
+/lib:
+    (mode: 0777, link: "usr/lib", pkgs: [base-files])
+    (mode: 0755, link: "", pkgs: [apparmor])
+/sbin:
+    (mode: 0777, link: "usr/sbin", pkgs: [base-files])
+    (mode: 0755, link: "", pkgs: [apparmor])
