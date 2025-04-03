@@ -24,7 +24,6 @@ type RunOptions struct {
 }
 
 func run(options *RunOptions) error {
-	// release, err := obtainRelease("../chisel-releases/ubuntu-24.04")
 	release, err := obtainRelease(options.releaseStr)
 	if err != nil {
 		return err
@@ -59,13 +58,13 @@ func run(options *RunOptions) error {
 
 	// Fetch all packages, using the selection order.
 	packages := make(map[string]io.ReadSeekCloser)
-	for _, pkg := range release.Packages {
-		reader, _, err := pkgArchive[pkg.Name].Fetch(pkg.Name)
+	for pkgName, archive := range pkgArchive {
+		reader, _, err := archive.Fetch(pkgName)
 		if err != nil {
 			return err
 		}
 		defer reader.Close()
-		packages[pkg.Name] = reader
+		packages[pkgName] = reader
 	}
 
 	type ownership struct {
@@ -100,7 +99,8 @@ func run(options *RunOptions) error {
 				continue
 			}
 			if isDir {
-				// Remove trailing '/'.
+				// Remove trailing '/' to make paths uniform. While directories
+				// always end in '/', symlinks don't.
 				path = path[:len(path)-1]
 			}
 
@@ -220,7 +220,11 @@ func selectPkgArchives(archives map[string]archive.Archive, release *setup.Relea
 			}
 		}
 		if chosen == nil {
-			return nil, fmt.Errorf("cannot find package %q in archive(s)", pkg.Name)
+			// return nil, fmt.Errorf("cannot find package %q in archive(s)", pkg.Name)
+			// TODO we need to continue instead of returning because in some
+			// architectures the package is not present and we want to skip it
+			// and proceed.
+			continue
 		}
 		pkgArchive[pkg.Name] = chosen
 	}
