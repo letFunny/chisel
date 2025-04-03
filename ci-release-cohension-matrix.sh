@@ -13,3 +13,6 @@ do
 	echo "processing ubuntu-24.10-$arch"
 	check "ubuntu-24.10" "$arch"
 done
+
+# TODO probably we need to clean the ~/.cache/chisel folder between iterations
+# if the GitHub runner keeps this in memory.
