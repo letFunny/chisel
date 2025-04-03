@@ -18,9 +18,14 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
-func run() error {
+type RunOptions struct {
+	releaseStr string
+	arch       string
+}
+
+func run(options *RunOptions) error {
 	// release, err := obtainRelease("../chisel-releases/ubuntu-24.04")
-	release, err := obtainRelease("ubuntu-24.04")
+	release, err := obtainRelease(options.releaseStr)
 	if err != nil {
 		return err
 	}
@@ -30,7 +35,7 @@ func run() error {
 		openArchive, err := archive.Open(&archive.Options{
 			Label:      archiveName,
 			Version:    archiveInfo.Version,
-			Arch:       "amd64",
+			Arch:       options.arch,
 			Suites:     archiveInfo.Suites,
 			Components: archiveInfo.Components,
 			Pro:        archiveInfo.Pro,
@@ -158,7 +163,20 @@ func run() error {
 }
 
 func main() {
-	err := run()
+	release, ok := os.LookupEnv("RELEASE")
+	if !ok {
+		release = "ubuntu-24.04"
+	}
+	arch, ok := os.LookupEnv("ARCH")
+	if !ok {
+		arch = "amd64"
+	}
+
+	options := &RunOptions{
+		releaseStr: release,
+		arch:       arch,
+	}
+	err := run(options)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
