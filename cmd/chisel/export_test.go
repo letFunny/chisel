@@ -19,3 +19,5 @@ func FakeIsStdinTTY(t bool) (restore func()) {
 }
 
 var FindSlices = findSlices
+
+var HasConflict = hasConflict
