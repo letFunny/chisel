@@ -56,9 +56,8 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 
 	directories := map[string][]ownership{}
 	for archiveName, archive := range archives {
-		fmt.Fprintf(os.Stderr, "archive %s\n", archiveName)
+		logf("Processing archive %s", archiveName)
 		for pkgName, _ := range release.Packages {
-			fmt.Fprintf(os.Stderr, "processing %s\n", pkgName)
 			if !archive.Exists(pkgName) {
 				continue
 			}
