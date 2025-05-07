@@ -85,10 +85,6 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 					continue
 				}
 				isDir := path[len(path)-1] == '/'
-				if !isDir && tarHeader.Linkname == "" {
-					// TODO false positives with symlinks that do not point to dirs.
-					continue
-				}
 				if isDir {
 					// Remove trailing '/' to make paths uniform. While directories
 					// always end in '/', symlinks don't.
