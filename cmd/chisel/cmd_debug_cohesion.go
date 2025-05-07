@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 
 	"github.com/jessevdk/go-flags"
+	"gopkg.in/yaml.v3"
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/cache"
@@ -48,10 +48,12 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 	}
 
 	type ownership struct {
-		mode int64
-		link string
-		pkgs []string
+		Mode yamlMode `yaml:"mode"`
+		Link string   `yaml:"link"`
+		// Pkgs is a correspondence from archive name to package names.
+		Pkgs map[string][]string `yaml:"packages"`
 	}
+
 	directories := map[string][]ownership{}
 	for archiveName, archive := range archives {
 		fmt.Fprintf(os.Stderr, "archive %s\n", archiveName)
@@ -100,15 +102,15 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 				// package as owning the path.
 				for i, o := range data {
 					if tarHeader.Linkname != "" {
-						if tarHeader.Linkname == o.link {
-							o.pkgs = append(o.pkgs, pkgName)
+						if tarHeader.Linkname == o.Link {
+							o.Pkgs[archiveName] = append(o.Pkgs[archiveName], pkgName)
 							data[i] = o
 							found = true
 							break
 						}
 					} else {
-						if tarHeader.Mode == o.mode {
-							o.pkgs = append(o.pkgs, pkgName)
+						if tarHeader.Mode == int64(o.Mode) {
+							o.Pkgs[archiveName] = append(o.Pkgs[archiveName], pkgName)
 							data[i] = o
 							found = true
 							break
@@ -117,9 +119,9 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 				}
 				if !found {
 					data = append(data, ownership{
-						mode: tarHeader.Mode,
-						link: tarHeader.Linkname,
-						pkgs: []string{pkgName},
+						Mode: yamlMode(tarHeader.Mode),
+						Link: tarHeader.Linkname,
+						Pkgs: map[string][]string{archiveName: []string{pkgName}},
 					})
 					directories[path] = data
 				}
@@ -127,27 +129,17 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 		}
 	}
 
-	var orderedDirs []string
-	for dir, data := range directories {
-		if len(data) == 1 {
-			continue
-		}
-		orderedDirs = append(orderedDirs, dir)
-	}
-	slices.Sort(orderedDirs)
-	for _, dir := range orderedDirs {
-		fmt.Printf("%s:\n", dir)
-		data := directories[dir]
-		for _, o := range data {
-			var pkgsStr string
-			if len(o.pkgs) <= 3 {
-				pkgsStr = fmt.Sprintf("%s", o.pkgs)
-			} else {
-				pkgsStr = fmt.Sprintf("[%s,%s,%s,...(and %d more)]", o.pkgs[0], o.pkgs[1], o.pkgs[2], len(o.pkgs)-3)
-			}
-			fmt.Printf("\t{mode: 0%o, link: %q, pkgs: %s}\n", o.mode, o.link, pkgsStr)
+	problematic := map[string][]ownership{}
+	for dir, o := range directories {
+		if len(o) > 1 {
+			problematic[dir] = o
 		}
 	}
+	yb, err := yaml.Marshal(problematic)
+	if err != nil {
+		return nil
+	}
+	fmt.Printf("%s", string(yb))
 
 	return nil
 }
@@ -160,6 +152,22 @@ func sanitizeTarPath(path string) (string, bool) {
 	}
 	return path[1:], true
 }
+
+type yamlMode int64
+
+func (ym yamlMode) MarshalYAML() (interface{}, error) {
+	// Workaround for marshalling integers in octal format.
+	// Ref: https://github.com/go-yaml/yaml/issues/420.
+	node := &yaml.Node{}
+	err := node.Encode(uint(ym))
+	if err != nil {
+		return nil, err
+	}
+	node.Value = fmt.Sprintf("0%o", ym)
+	return node, nil
+}
+
+var _ yaml.Marshaler = yamlMode(0)
 
 func init() {
 	// TODO: this should be debug command with no help and not shown by default.
