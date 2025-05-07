@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/jessevdk/go-flags"
 
@@ -52,9 +53,10 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 		pkgs []string
 	}
 	directories := map[string][]ownership{}
-	for pkgName, _ := range release.Packages {
-		fmt.Fprintf(os.Stderr, "processing %s\n", pkgName)
-		for archiveName, archive := range archives {
+	for archiveName, archive := range archives {
+		fmt.Fprintf(os.Stderr, "archive %s\n", archiveName)
+		for pkgName, _ := range release.Packages {
+			fmt.Fprintf(os.Stderr, "processing %s\n", pkgName)
 			if !archive.Exists(pkgName) {
 				continue
 			}
@@ -66,7 +68,6 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(os.Stderr, "archive %s\n", archiveName)
 			tarReader := tar.NewReader(dataReader)
 			for {
 				tarHeader, err := tarReader.Next()
@@ -92,17 +93,11 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 					path = path[:len(path)-1]
 				}
 
-				data, ok := directories[path]
-				if !ok {
-					o := ownership{
-						mode: tarHeader.Mode,
-						link: tarHeader.Linkname,
-						pkgs: []string{pkgName},
-					}
-					directories[path] = []ownership{o}
-				}
-
+				data := directories[path]
 				found := false
+				// We look for a previous package that has the same entry in
+				// terms of mode, link, etc. If there is none we record this
+				// package as owning the path.
 				for i, o := range data {
 					if tarHeader.Linkname != "" {
 						if tarHeader.Linkname == o.link {
@@ -132,19 +127,25 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 		}
 	}
 
+	var orderedDirs []string
 	for dir, data := range directories {
 		if len(data) == 1 {
 			continue
 		}
+		orderedDirs = append(orderedDirs, dir)
+	}
+	slices.Sort(orderedDirs)
+	for _, dir := range orderedDirs {
 		fmt.Printf("%s:\n", dir)
+		data := directories[dir]
 		for _, o := range data {
 			var pkgsStr string
 			if len(o.pkgs) <= 3 {
 				pkgsStr = fmt.Sprintf("%s", o.pkgs)
 			} else {
-				pkgsStr = fmt.Sprintf("[%s,%s,%s...(and %d more)]", o.pkgs[0], o.pkgs[1], o.pkgs[2], len(o.pkgs)-3)
+				pkgsStr = fmt.Sprintf("[%s,%s,%s,...(and %d more)]", o.pkgs[0], o.pkgs[1], o.pkgs[2], len(o.pkgs)-3)
 			}
-			fmt.Printf("    (mode: 0%o, link: %q, pkgs: %s)\n", o.mode, o.link, pkgsStr)
+			fmt.Printf("\t{mode: 0%o, link: %q, pkgs: %s}\n", o.mode, o.link, pkgsStr)
 		}
 	}
 
