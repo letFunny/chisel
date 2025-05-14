@@ -137,6 +137,7 @@ var infoTests = []infoTest{{
 	err:     `no slice definitions found for: "foo_bar_foo", "a_b", "7_c", "a_b c", "a_b x_y"`,
 }}
 
+// TODO move to common location.
 var testKey = testutil.PGPKeys["key1"]
 
 var defaultChiselYaml = `

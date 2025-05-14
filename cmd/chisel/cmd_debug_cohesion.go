@@ -134,7 +134,7 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 	if err != nil {
 		return nil
 	}
-	fmt.Printf("%s", string(yb))
+	fmt.Fprintf(Stdout, "%s", string(yb))
 
 	return nil
 }
