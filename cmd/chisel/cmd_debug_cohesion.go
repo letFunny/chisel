@@ -53,7 +53,7 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 		Mode yamlMode `yaml:"mode"`
 		Link string   `yaml:"link"`
 		// Pkgs is a correspondence from archive name to package names.
-		Pkgs map[string][]string `yaml:"packages"`
+		Pkgs map[string][]string `yaml:"packages,flow"`
 	}
 
 	directories := map[string][]ownership{}
