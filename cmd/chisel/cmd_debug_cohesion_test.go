@@ -98,6 +98,45 @@ var cohesionTests = []cohesionTest{{
 			  link: ""
 			  packages: {ubuntu: [pkg-b]}
 	`,
+}, {
+	summary: "Multiple archives",
+	release: map[string]string{
+		"chisel.yaml": makeChiselYaml([]string{"archive1", "archive2"}),
+		"slices/mydir/pkg-a.yaml": `
+			package: pkg-a
+			slices:
+				myslice:
+					contents:
+		`,
+		"slices/mydir/pkg-b.yaml": `
+			package: pkg-b
+			slices:
+				myslice:
+					contents:
+		`,
+	},
+	pkgs: []*testutil.TestPackage{{
+		Name: "pkg-a",
+		Data: testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(0755, "./dir/"),
+		}),
+		Archives: []string{"archive1"},
+	}, {
+		Name: "pkg-b",
+		Data: testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(0756, "./dir/"),
+		}),
+		Archives: []string{"archive2"},
+	}},
+	stdout: `
+		/dir:
+			- mode: 0755
+			  link: ""
+			  packages: {archive1: [pkg-a]}
+			- mode: 0756
+			  link: ""
+			  packages: {archive2: [pkg-b]}
+	`,
 }}
 
 func (s *ChiselSuite) TestRun(c *C) {
@@ -180,10 +219,14 @@ func makeChiselYaml(archives []string) string {
 	yaml.Unmarshal([]byte(rawChiselYaml), chiselYaml)
 
 	archivesYaml := chiselYaml["archives"].(map[string]any)
-	ubuntuArchive := archivesYaml["ubuntu"]
+	ubuntuArchive := archivesYaml["ubuntu"].(map[string]any)
 	delete(archivesYaml, "ubuntu")
-	for _, archive := range archives {
-		archivesYaml[archive] = ubuntuArchive
+
+	for i, archiveName := range archives {
+		archive := deepCopyYAML(ubuntuArchive)
+		// Valid chisel.yaml has different priorities.
+		archive["priority"] = i + 1
+		archivesYaml[archiveName] = archive
 	}
 
 	bs, err := yaml.Marshal(chiselYaml)
@@ -191,4 +234,18 @@ func makeChiselYaml(archives []string) string {
 		panic(err)
 	}
 	return string(bs)
+}
+
+func deepCopyYAML(src map[string]any) map[string]any {
+	dest := map[string]any{}
+	for key, value := range src {
+		switch src[key].(type) {
+		case map[string]interface{}:
+			dest[key] = map[string]interface{}{}
+			dest[key] = deepCopyYAML(src[key].(map[string]interface{}))
+		default:
+			dest[key] = value
+		}
+	}
+	return dest
 }
