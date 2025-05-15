@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/jessevdk/go-flags"
@@ -57,10 +58,16 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 		Pkgs map[string][]string `yaml:"packages,flow"`
 	}
 
+	var orderedPkgs []string
+	for packageName, _ := range release.Packages {
+		orderedPkgs = append(orderedPkgs, packageName)
+	}
+	slices.Sort(orderedPkgs)
+
 	directories := map[string][]ownership{}
 	for archiveName, archive := range archives {
 		logf("Processing archive %s", archiveName)
-		for pkgName, _ := range release.Packages {
+		for _, pkgName := range orderedPkgs {
 			if !archive.Exists(pkgName) {
 				continue
 			}
@@ -96,7 +103,7 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 				// terms of mode, link, etc. If there is none we record this
 				// package as owning the path.
 				for i, o := range data {
-					if tarHeader.Linkname != "" {
+					if tarHeader.Linkname != "" || o.Link != "" {
 						if tarHeader.Linkname == o.Link {
 							o.Pkgs[archiveName] = append(o.Pkgs[archiveName], pkgName)
 							data[i] = o

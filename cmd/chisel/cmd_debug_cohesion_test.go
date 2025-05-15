@@ -25,7 +25,7 @@ type cohesionTest struct {
 }
 
 var cohesionTests = []cohesionTest{{
-	summary: "Basic slicing",
+	summary: "Parent directory conflict",
 	release: map[string]string{
 		"chisel.yaml": makeChiselYaml([]string{"ubuntu"}),
 		"slices/mydir/pkg-a.yaml": `
@@ -45,13 +45,11 @@ var cohesionTests = []cohesionTest{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./dir/"),
-			testutil.Reg(0644, "./dir/file", "whatever"),
 		}),
 	}, {
 		Name: "pkg-b",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0756, "./dir/"),
-			testutil.Reg(0644, "./dir/file", "whatever"),
 		}),
 	}},
 	stdout: `
@@ -63,11 +61,49 @@ var cohesionTests = []cohesionTest{{
 			  link: ""
 			  packages: {ubuntu: [pkg-b]}
 	`,
+}, {
+	summary: "Parent directory conflicts with a symlink",
+	release: map[string]string{
+		"chisel.yaml": makeChiselYaml([]string{"ubuntu"}),
+		"slices/mydir/pkg-a.yaml": `
+			package: pkg-a
+			slices:
+				myslice:
+					contents:
+		`,
+		"slices/mydir/pkg-b.yaml": `
+			package: pkg-b
+			slices:
+				myslice:
+					contents:
+		`,
+	},
+	pkgs: []*testutil.TestPackage{{
+		Name: "pkg-a",
+		Data: testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Lnk(0777, "./dir", "/other"),
+		}),
+	}, {
+		Name: "pkg-b",
+		Data: testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(0777, "./dir/"),
+		}),
+	}},
+	stdout: `
+		/dir:
+			- mode: 0777
+			  link: /other
+			  packages: {ubuntu: [pkg-a]}
+			- mode: 0777
+			  link: ""
+			  packages: {ubuntu: [pkg-b]}
+	`,
 }}
 
 func (s *ChiselSuite) TestRun(c *C) {
 	for _, test := range cohesionTests {
 		c.Logf("Summary: %s", test.summary)
+		s.ResetStdStreams()
 
 		releaseDir := c.MkDir()
 		for path, data := range test.release {
