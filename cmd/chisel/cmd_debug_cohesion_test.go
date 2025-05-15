@@ -15,40 +15,6 @@ import (
 	"github.com/canonical/chisel/internal/testutil"
 )
 
-// makeChiselYaml returns valid yaml that conforms to chisel.yaml that contains
-// the archive supplied.
-func makeChiselYaml(archives []string) string {
-	archiveKey := testutil.PGPKeys["key-ubuntu-2018"]
-	rawChiselYaml := testutil.Reindent(`
-		format: v1
-		archives:
-			ubuntu:
-				version: 22.04
-				components: [main, universe]
-				suites: [jammy]
-				public-keys: [test-key]
-		public-keys:
-			test-key:
-				id: ` + archiveKey.ID + `
-				armor: |` + "\n" + testutil.PrefixEachLine(archiveKey.PubKeyArmor, "\t\t\t\t\t\t"))
-
-	chiselYaml := map[string]any{}
-	yaml.Unmarshal([]byte(rawChiselYaml), chiselYaml)
-
-	archivesYaml := chiselYaml["archives"].(map[string]any)
-	ubuntuArchive := archivesYaml["ubuntu"]
-	delete(archivesYaml, "ubuntu")
-	for _, archive := range archives {
-		archivesYaml[archive] = ubuntuArchive
-	}
-
-	bs, err := yaml.Marshal(chiselYaml)
-	if err != nil {
-		panic(err)
-	}
-	return string(bs)
-}
-
 type cohesionTest struct {
 	summary string
 	arch    string
@@ -146,4 +112,38 @@ func (s *ChiselSuite) TestRun(c *C) {
 		test.stdout = string(testutil.Reindent(test.stdout))
 		c.Assert(s.Stdout(), Equals, strings.TrimSpace(test.stdout)+"\n")
 	}
+}
+
+// makeChiselYaml returns valid yaml that conforms to chisel.yaml that contains
+// the archive supplied.
+func makeChiselYaml(archives []string) string {
+	archiveKey := testutil.PGPKeys["key-ubuntu-2018"]
+	rawChiselYaml := testutil.Reindent(`
+		format: v1
+		archives:
+			ubuntu:
+				version: 22.04
+				components: [main, universe]
+				suites: [jammy]
+				public-keys: [test-key]
+		public-keys:
+			test-key:
+				id: ` + archiveKey.ID + `
+				armor: |` + "\n" + testutil.PrefixEachLine(archiveKey.PubKeyArmor, "\t\t\t\t\t\t"))
+
+	chiselYaml := map[string]any{}
+	yaml.Unmarshal([]byte(rawChiselYaml), chiselYaml)
+
+	archivesYaml := chiselYaml["archives"].(map[string]any)
+	ubuntuArchive := archivesYaml["ubuntu"]
+	delete(archivesYaml, "ubuntu")
+	for _, archive := range archives {
+		archivesYaml[archive] = ubuntuArchive
+	}
+
+	bs, err := yaml.Marshal(chiselYaml)
+	if err != nil {
+		panic(err)
+	}
+	return string(bs)
 }
