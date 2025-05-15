@@ -49,8 +49,7 @@ func makeChiselYaml(archives []string) string {
 	return string(bs)
 }
 
-// TODO rename.
-type slicerTest struct {
+type cohesionTest struct {
 	summary string
 	arch    string
 	release map[string]string
@@ -59,7 +58,7 @@ type slicerTest struct {
 	err     string
 }
 
-var slicerTests = []slicerTest{{
+var cohesionTests = []cohesionTest{{
 	summary: "Basic slicing",
 	release: map[string]string{
 		"chisel.yaml": makeChiselYaml([]string{"ubuntu"}),
@@ -92,7 +91,7 @@ var slicerTests = []slicerTest{{
 }}
 
 func (s *ChiselSuite) TestRun(c *C) {
-	for _, test := range slicerTests {
+	for _, test := range cohesionTests {
 		c.Logf("Summary: %s", test.summary)
 
 		releaseDir := c.MkDir()
@@ -128,6 +127,13 @@ func (s *ChiselSuite) TestRun(c *C) {
 			}
 			archives[name] = archive
 		}
+
+		restore := chisel.FakeArchiveOpen(func(options *archive.Options) (archive.Archive, error) {
+			archive, ok := archives[options.Label]
+			c.Assert(ok, Equals, true)
+			return archive, nil
+		})
+		defer restore()
 
 		cliArgs := []string{"check-cohesion", "--release", releaseDir}
 

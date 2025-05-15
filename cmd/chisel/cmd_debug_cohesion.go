@@ -19,6 +19,8 @@ type cmdDebugCohesion struct {
 	Arch    string `long:"arch" value-name:"<arch>"`
 }
 
+var archiveOpen = archive.Open
+
 func (cmd *cmdDebugCohesion) Execute(args []string) error {
 	release, err := obtainRelease(cmd.Release)
 	if err != nil {
@@ -27,7 +29,7 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 
 	archives := make(map[string]archive.Archive)
 	for archiveName, archiveInfo := range release.Archives {
-		openArchive, err := archive.Open(&archive.Options{
+		openArchive, err := archiveOpen(&archive.Options{
 			Label:      archiveName,
 			Version:    archiveInfo.Version,
 			Arch:       cmd.Arch,
