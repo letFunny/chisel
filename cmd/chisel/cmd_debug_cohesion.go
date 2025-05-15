@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/jessevdk/go-flags"
 	"gopkg.in/yaml.v3"
@@ -85,12 +86,9 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 				if !ok {
 					continue
 				}
-				isDir := path[len(path)-1] == '/'
-				if isDir {
-					// Remove trailing '/' to make paths uniform. While directories
-					// always end in '/', symlinks don't.
-					path = path[:len(path)-1]
-				}
+				// Make paths uniform: while directories always end in '/',
+				// symlinks don't.
+				path = strings.TrimSuffix(path, "/")
 
 				data := directories[path]
 				found := false

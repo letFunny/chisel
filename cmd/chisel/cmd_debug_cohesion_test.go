@@ -54,6 +54,15 @@ var cohesionTests = []cohesionTest{{
 			testutil.Reg(0644, "./dir/file", "whatever"),
 		}),
 	}},
+	stdout: `
+		/dir:
+			- mode: 0755
+			  link: ""
+			  packages: {ubuntu: [pkg-a]}
+			- mode: 0756
+			  link: ""
+			  packages: {ubuntu: [pkg-b]}
+	`,
 }}
 
 func (s *ChiselSuite) TestRun(c *C) {
