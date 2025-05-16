@@ -1,0 +1,7 @@
+summary: Check cohesion runs correctly
+
+execute: |
+  chisel check-cohesion --release ${OS}-${RELEASE} 2> stderr.out
+
+  grep -q "Fetching" stderr.out
+  grep -q "Processing archive" stderr.out
