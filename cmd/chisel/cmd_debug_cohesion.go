@@ -78,7 +78,7 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 	}
 
 	var orderedPkgs []string
-	for packageName, _ := range release.Packages {
+	for packageName := range release.Packages {
 		orderedPkgs = append(orderedPkgs, packageName)
 	}
 	slices.Sort(orderedPkgs)
