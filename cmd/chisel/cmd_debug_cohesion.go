@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"strings"
 
@@ -15,6 +14,26 @@ import (
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/deb"
 )
+
+var shortCohesionHelp = "Check a release does not have implicit conflicts"
+
+var longCheckCohesionHelp = `
+The check-cohesion command checks that a given release does not have implicit
+conflicts which are not handled in the slice definition files.
+
+A release has implicit conflicts when changing the selection of packages means
+Chisel will create different files in the final filesystem which are not listed
+in the slice definition file; hence why we call them "implicit". This can
+happen for parent directories which are not listed explicitly because Chisel
+will try to preserve permissions by using the mode from the package's tarball.
+If several packages have different permissions for the same directory, that can
+lead to a conflict.
+`
+
+var cohesionDescs = map[string]string{
+	"release": "Chisel release name or directory (e.g. ubuntu-22.04)",
+	"arch":    "Package architecture",
+}
 
 type cmdDebugCohesion struct {
 	Release string `long:"release" value-name:"<branch|dir>"`
@@ -43,7 +62,7 @@ func (cmd *cmdDebugCohesion) Execute(args []string) error {
 		})
 		if err != nil {
 			if err == archive.ErrCredentialsNotFound {
-				fmt.Fprintf(os.Stderr, "Archive %q ignored: credentials not found\n", archiveName)
+				logf("Archive %q ignored: credentials not found\n", archiveName)
 				continue
 			}
 			return err
@@ -172,6 +191,5 @@ func (ym yamlMode) MarshalYAML() (interface{}, error) {
 var _ yaml.Marshaler = yamlMode(0)
 
 func init() {
-	// TODO: this should be debug command with no help and not shown by default.
-	addCommand("check-cohesion", shortCutHelp, longCutHelp, func() flags.Commander { return &cmdDebugCohesion{} }, cutDescs, nil)
+	addDebugCommand("check-cohesion", shortCohesionHelp, longCheckCohesionHelp, func() flags.Commander { return &cmdDebugCohesion{} }, cohesionDescs, nil)
 }
