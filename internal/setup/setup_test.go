@@ -48,6 +48,55 @@ var setupTests = []setupTest{{
 	},
 	relerror: `chisel.yaml: no archives defined`,
 }, {
+	summary: "Top-level release field is parsed when present",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: v1
+			release: 24.04
+			maintenance:
+				standard: 2025-01-01
+				end-of-life: 2100-01-01
+			archives:
+				ubuntu:
+					version: 24.04
+					components: [main]
+					suites: [noble]
+					public-keys: [test-key]
+			public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/mypkg.yaml": `
+			package: mypkg
+		`,
+	},
+	release: &setup.Release{
+		Format:  "v1",
+		Release: "24.04",
+		Archives: map[string]*setup.Archive{
+			"ubuntu": {
+				Name:       "ubuntu",
+				Version:    "24.04",
+				Suites:     []string{"noble"},
+				Components: []string{"main"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Maintained: true,
+			},
+		},
+		Packages: map[string]*setup.Package{
+			"mypkg": {
+				Name:   "mypkg",
+				Path:   "slices/mydir/mypkg.yaml",
+				Slices: map[string]*setup.Slice{},
+			},
+		},
+		Maintenance: &setup.Maintenance{
+			Standard:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
+		},
+	},
+}, {
 	summary: "Enforce matching filename and package name",
 	input: map[string]string{
 		"slices/mydir/mypkg.yaml": `

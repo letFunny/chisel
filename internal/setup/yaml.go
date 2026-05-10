@@ -27,6 +27,7 @@ var _ yaml.Marshaler = (*Package)(nil)
 
 type yamlRelease struct {
 	Format      string                 `yaml:"format"`
+	Release     string                 `yaml:"release"`
 	Maintenance yamlMaintenance        `yaml:"maintenance"`
 	Archives    map[string]yamlArchive `yaml:"archives"`
 	PubKeys     map[string]yamlPubKey  `yaml:"public-keys"`
@@ -287,6 +288,7 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		return nil, fmt.Errorf("%s: unknown format %q", fileName, yamlVar.Format)
 	}
 	release.Format = yamlVar.Format
+	release.Release = yamlVar.Release
 
 	if yamlVar.Format != "v1" && len(yamlVar.V2Archives) > 0 {
 		return nil, fmt.Errorf("%s: v2-archives is obsolete since format v2", fileName)

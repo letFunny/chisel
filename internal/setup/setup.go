@@ -20,6 +20,7 @@ import (
 // distribution version.
 type Release struct {
 	Format      string
+	Release     string
 	Path        string
 	Packages    map[string]*Package
 	Archives    map[string]*Archive
