@@ -51,10 +51,11 @@ type Archive struct {
 
 // Package holds a collection of slices that represent parts of themselves.
 type Package struct {
-	Name    string
-	Path    string
-	Archive string
-	Slices  map[string]*Slice
+	Name         string
+	Path         string
+	Archive      string
+	DefaultTrack string
+	Slices       map[string]*Slice
 }
 
 // Slice holds the details about a package slice.
@@ -68,7 +69,13 @@ type Slice struct {
 }
 
 type EssentialInfo struct {
-	Arch []string
+	Arch     []string
+	Channels []Channel
+}
+
+type Channel struct {
+	Track string
+	Risk  string
 }
 
 type SliceScripts struct {
@@ -111,6 +118,7 @@ type PathInfo struct {
 	Mutable  bool
 	Until    PathUntil
 	Arch     []string
+	Channels []Channel
 	Generate GenerateKind
 	Prefer   string
 }
